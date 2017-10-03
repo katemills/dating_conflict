@@ -1,0 +1,123 @@
+---
+title: "Dating Conflict Analysis"
+author: "Kate Mills"
+date: "October 3, 2017"
+output: html_document
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = FALSE,
+  message = FALSE,
+  warning = FALSE
+)
+```
+
+Load required packages and scripts (no input needed)
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+	message = FALSE,
+	warning = FALSE,
+	include = FALSE
+)
+packages <- c( "tidyverse", "nlme", "lme4", "RODBC", "data.table",
+               "ggplot2")
+if (length(setdiff(packages, rownames(installed.packages()))) > 0) {
+  install.packages(setdiff(packages, rownames(installed.packages())))
+}
+lapply(packages, library, character.only = TRUE)
+workdir=substring(paste0(getwd()),0,53)
+```
+
+Load data
+```{r, include=FALSE}
+conn <- RODBC::odbcConnect(dsn="PInf1")
+participants <- data.table(RODBC::sqlQuery(conn,"SELECT * From PInf1.dbo.SMaster")) %>%
+  select(SID,Gender,Latino,EthWhite,EthBlack,EthAsian,EthNAm,EthPacIs,EthOther)
+surveydata <- data.table(RODBC::sqlQuery(conn,"SELECT * From PInf1.dbo.SWave"))
+rm(conn)
+```
+
+Clean data
+```{r, include=FALSE}
+demographics <- participants %>%
+  mutate(Ethnicity=ifelse(rowSums(select(., contains("Eth")),na.rm = TRUE)>1,"Multiethnic",
+                          ifelse(rowSums(select(., contains("Eth")),na.rm = TRUE)<1,NA,
+                          1))) %>%
+  mutate(Ethnicity=ifelse(!Ethnicity=="Multiethnic" & EthWhite==1,"White",
+                          ifelse(!Ethnicity=="Multiethnic" & EthOther==1,"Other",
+                                 ifelse(!Ethnicity=="Multiethnic" & EthBlack==1,"AfricanAmerican",
+                                 ifelse(!Ethnicity=="Multiethnic" & EthAsian==1,"AsianAmerican",
+                                        ifelse(!Ethnicity=="Multiethnic" & EthNAm==1,"NativeAmerican",
+                                               ifelse(!Ethnicity=="Multiethnic" & EthPacIs==1,"PacificIslander",
+                                                      Ethnicity))))))) %>%
+  select(SID,Gender,Ethnicity, Latino)
+
+puberty<-left_join(demographics,(surveydata %>%
+                                   select(SID,WID,contains("Pub")))) %>%
+  mutate(Puberty_Female=ifelse(Gender==0,rowMeans(cbind(PubSpurt,PubHair,PubZits,PubBreast),na.rm = FALSE),NA),
+         Puberty_Male=ifelse(Gender==1,rowMeans(cbind(PubSpurt,PubHair,PubZits,PubVoice,PubFace),na.rm = FALSE),NA),
+         PeriodStart=ifelse(PubMenses==0,0,
+                            ifelse(!PubMenses==0,PubMenses+5,NA)))
+```
+
+Descriptives
+```{r, include=FALSE}
+# Puberty Distribution
+Female_Puberty<-ggplot(puberty, aes(x=Puberty_Female,
+                    colour=as.factor(WID)))+
+               geom_density(alpha=.7,
+                            size=1.5) +
+  labs(x="Pubertal Measure",colour='Wave') +
+  ggtitle("Puberty Distribution (Female)") +
+  theme_bw() +
+  theme_minimal(base_size = 14, base_family = "Arial") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank(),
+        legend.position="bottom")
+Female_Puberty
+ggsave(plot = Female_Puberty,file=paste(workdir,"graphs/Female_PubertybyWave_dist.png",sep = ""),
+       width = 6, height = 4, dpi = 300,units="in")
+
+Male_Puberty<-ggplot(puberty, aes(x=Puberty_Male,
+                    colour=as.factor(WID)))+
+               geom_density(alpha=.7,
+                            size=1.5) +
+  labs(x="Pubertal Measure",colour='Wave') +
+  ggtitle("Puberty Distribution (Male)") +
+  theme_bw() +
+  theme_minimal(base_size = 14, base_family = "Arial") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank(),
+        legend.position="bottom")
+Male_Puberty
+ggsave(plot = Female_Puberty,file=paste(workdir,"graphs/Male_PubertybyWave_dist.png",sep = ""),
+       width = 6, height = 4, dpi = 300,units="in")
+
+# Puberty descriptive for Grade 8
+female_puberty_dist_grade8<-puberty %>%
+                                  filter(WID==1) %>%
+                                  group_by(Puberty_Female) %>%
+                                  summarize(n()) %>%
+                                  mutate(Female_Puberty_Count=.[[2]],
+                                         Puberty_Score=Puberty_Female)%>%
+                                  select(Female_Puberty_Count,Puberty_Score)
+male_puberty_dist_grade8<-puberty %>%
+                                  filter(WID==1) %>%
+                                  group_by(Puberty_Male) %>%
+                                  summarize(n()) %>%
+                                  mutate(Male_Puberty_Count=.[[2]],
+                                         Puberty_Score=Puberty_Male)%>%
+                                  select(Male_Puberty_Count,Puberty_Score)
+
+t.test(puberty$Puberty_Female,puberty$Puberty_Male)
+
+
+```
