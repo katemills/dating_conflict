@@ -59,7 +59,14 @@ puberty<-left_join(demographics,(surveydata %>%
   mutate(Puberty_Female=ifelse(Gender==0,rowMeans(cbind(PubSpurt,PubHair,PubZits,PubBreast),na.rm = FALSE),NA),
          Puberty_Male=ifelse(Gender==1,rowMeans(cbind(PubSpurt,PubHair,PubZits,PubVoice,PubFace),na.rm = FALSE),NA),
          PeriodStart=ifelse(PubMenses==0,0,
-                            ifelse(!PubMenses==0,PubMenses+5,NA)))
+                            ifelse(!PubMenses==0,PubMenses+5,NA))) %>%
+  select(-PubSpurt,-PubZits,-PubHair,-PubBreast,-PubVoice,-PubFace,-PubMenses,-PubKiss)
+
+opportunities<-surveydata %>% 
+  select(SID,WID,Kiss3Mo,Laid3Mo,PartyNA3Mo) %>%
+  mutate(OppMonitorMean=round(rowMeans(cbind(Kiss3Mo,Laid3Mo,PartyNA3Mo),na.rm=FALSE),2),
+         OppMonitorTotal=rowSums(cbind(Kiss3Mo,Laid3Mo,PartyNA3Mo),na.rm=TRUE)) %>%
+  filter(!is.na(OppMonitorMean))
 ```
 
 Descriptives
@@ -98,11 +105,12 @@ Male_Puberty<-ggplot(puberty, aes(x=Puberty_Male,
         panel.background = element_blank(),
         legend.position="bottom")
 Male_Puberty
-ggsave(plot = Female_Puberty,file=paste(workdir,"graphs/Male_PubertybyWave_dist.png",sep = ""),
+ggsave(plot = Male_Puberty,file=paste(workdir,"graphs/Male_PubertybyWave_dist.png",sep = ""),
        width = 6, height = 4, dpi = 300,units="in")
 
 # Puberty descriptive for Grade 8
 female_puberty_dist_grade8<-puberty %>%
+  mutate(Puberty_Female=round(Puberty_Female,0)) %>%
                                   filter(WID==1) %>%
                                   group_by(Puberty_Female) %>%
                                   summarize(n()) %>%
@@ -110,6 +118,7 @@ female_puberty_dist_grade8<-puberty %>%
                                          Puberty_Score=Puberty_Female)%>%
                                   select(Female_Puberty_Count,Puberty_Score)
 male_puberty_dist_grade8<-puberty %>%
+  mutate(Puberty_Male=round(Puberty_Male,0)) %>%
                                   filter(WID==1) %>%
                                   group_by(Puberty_Male) %>%
                                   summarize(n()) %>%
@@ -117,7 +126,73 @@ male_puberty_dist_grade8<-puberty %>%
                                          Puberty_Score=Puberty_Male)%>%
                                   select(Male_Puberty_Count,Puberty_Score)
 
-t.test(puberty$Puberty_Female,puberty$Puberty_Male)
+# Opportunities Monitoring
+opp_montioring_dist_mean<-ggplot(opportunities, aes(x=OppMonitorMean,
+                    colour=as.factor(WID)))+
+               geom_density(alpha=.7,
+                            size=1.5) +
+  labs(x="Opportunities Monitoring",colour='Wave') +
+  ggtitle("Opportunities Monitoring (mean) Distribution by Wave") +
+  theme_bw() +
+  theme_minimal(base_size = 14, base_family = "Arial") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank(),
+        legend.position="bottom")
+opp_montioring_dist_mean
+ggsave(plot = opp_montioring_dist_mean,file=paste(workdir,"graphs/opp_montioring_dist_mean.png",sep = ""),
+       width = 6, height = 4, dpi = 300,units="in")
+
+opp_montioring_dist_total<-ggplot(opportunities, aes(x=OppMonitorTotal,
+                    colour=as.factor(WID)))+
+               geom_density(alpha=.7,
+                            size=1.5) +
+  labs(x="Opportunities Monitoring",colour='Wave') +
+  ggtitle("Opportunities Monitoring (total) Distribution by Wave") +
+  theme_bw() +
+  theme_minimal(base_size = 14, base_family = "Arial") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank(),
+        legend.position="bottom")
+opp_montioring_dist_total
+ggsave(plot = opp_montioring_dist_total,file=paste(workdir,"graphs/opp_montioring_dist_total.png",sep = ""),
+       width = 6, height = 4, dpi = 300,units="in")
+
+```
+
+Analyses set up
+```{r}
+
+# Question 1:
+# Does Gender, Ethnicity, and/or Pubertal Status at Grade 8 predict likelihood to being in situations
+# where sexual risk behavior could occur?
+# IVs: a) Gender, b) Ethnicity, c) Pubertal Status at Grade 8
+# DVs: a) EMA time unsupervised w/ partner at Grade 9 +summer
+#      b) Opportunities monitoring score at Grade 9
+
+thedata<-left_join((opportunities %>% filter(WID==c(5))),
+                   (puberty %>% filter(WID==1)),
+                    by = c("SID")) %>%
+  mutate(Gender=ifelse(Gender==0,"Female",
+                       ifelse(Gender==1,"Male",NA)),
+         Puberty=ifelse(!is.na(Puberty_Female),round(Puberty_Female,0),
+                        ifelse(!is.na(Puberty_Male),round(Puberty_Male,0),NA)))
+
+gender_pred_oppmon<-lme(OppMonitorMean ~ Gender, method="ML", random = ~1|SID, data=thedata, na.action=na.exclude)
+ethnicity_pred_oppmon<-lme(OppMonitorMean ~ Ethnicity, method="ML", random = ~1|SID, data=thedata, na.action=na.exclude)
+puberty_pred_oppmon<-lme(OppMonitorMean ~ ordered(Puberty), method="ML", random = ~1|SID, data=thedata, na.action=na.exclude)
+pubertygender_pred_oppmon<-lme(OppMonitorMean ~ ordered(Puberty)*Gender, method="ML", random = ~1|SID, data=thedata, na.action=na.exclude)
+
+anova(gender_pred_oppmon)
+anova(ethnicity_pred_oppmon)
+anova(puberty_pred_oppmon)
+anova(pubertygender_pred_oppmon)
+
 
 
 ```
