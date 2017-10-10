@@ -53,6 +53,8 @@ rm(conn)
 
 Clean data
 ```{r, message=FALSE, warning=FALSE, include=FALSE}
+
+# Clean up ethnicity data
 demographics <- participants %>%
   mutate(Ethnicity=ifelse(rowSums(select(., contains("Eth")),na.rm = TRUE)>1,"Multiethnic",
                           ifelse(rowSums(select(., contains("Eth")),na.rm = TRUE)<1,NA,
@@ -66,6 +68,7 @@ demographics <- participants %>%
                                                       Ethnicity))))))) %>%
   select(SID,Gender,Ethnicity, Latino)
 
+# Clean up puberty data
 puberty<-left_join(demographics,(surveydata %>%
                                    select(SID,WID,contains("Pub")))) %>%
   mutate(PubSpurt=PubSpurt+1,
@@ -99,15 +102,37 @@ puberty<-left_join(demographics,(surveydata %>%
   mutate(Puberty_Category=factor(Puberty_Category,levels = c("Prepubertal", "Early Pubertal", "Midpubertal",
                                                              "Late pubertal","Postpubertal")))
 
+# Calculate the mean and total opportunities monitoring scores
 opportunities<-surveydata %>% 
   select(SID,WID,Kiss3Mo,Laid3Mo,PartyNA3Mo) %>%
   mutate(OppMonitorMean=round(rowMeans(cbind(Kiss3Mo,Laid3Mo,PartyNA3Mo),na.rm=FALSE),2),
          OppMonitorTotal=rowSums(cbind(Kiss3Mo,Laid3Mo,PartyNA3Mo),na.rm=TRUE)) %>%
   filter(!is.na(OppMonitorMean))
+
+# Clean oldest partner age to identify the oldest partner by grade 10 (Wave 9)
+age_oldest_partner<-surveydata %>% 
+  select(SID,WID,AgeOldBFGF2) %>%
+  filter(!is.na(AgeOldBFGF2),
+         !WID==11) %>%
+  group_by(SID) %>%
+  do({oldest_age<-(sort(.$AgeOldBFGF2,decreasing = TRUE)[[1]])
+      dplyr::mutate(.,oldest=oldest_age)
+  })
+
+# Calculate the mean and total dating conflict score
+dating_conflict<-surveydata %>% 
+  select(SID,WID,Jealous,IValued,IDone,MeAngry,MeanTone,PutDown,KepTrak,BlaMe,
+         AcFlirt,Fright,MadeFun,TTHurt,TTEnd,TTHit) %>%
+  mutate(DatingConflictMean=round(rowMeans(cbind(Jealous,IValued,IDone,MeAngry,MeanTone,PutDown,KepTrak,BlaMe,
+         AcFlirt,Fright,MadeFun,TTHurt,TTEnd,TTHit),na.rm=FALSE),2),
+         DatingConflictTotal=rowSums(cbind(Jealous,IValued,IDone,MeAngry,MeanTone,PutDown,KepTrak,BlaMe,
+         AcFlirt,Fright,MadeFun,TTHurt,TTEnd,TTHit),na.rm=TRUE)) %>%
+  filter(!is.na(DatingConflictMean))
+  
 ```
 
 Descriptives
-```{r, include=FALSE}
+```{r, message=FALSE, warning=FALSE, include=FALSE}
 # Puberty Distribution
 Female_Puberty<-ggplot(puberty, aes(x=PDS_Female,
                     colour=as.factor(WID)))+
@@ -176,15 +201,10 @@ opp_montioring_dist_mean<-ggplot(opportunities, aes(x=OppMonitorMean,
                             size=1.5) +
   labs(x="Opportunities Monitoring",colour='Wave') +
   ggtitle("Opportunities Monitoring (mean) Distribution by Wave") +
-  theme_bw() +
-  theme_minimal(base_size = 14, base_family = "Arial") +
-  theme(axis.line = element_line(colour = "black"),
-        panel.grid.major = element_blank(),
-        panel.grid.minor = element_blank(),
-        panel.border = element_blank(),
-        panel.background = element_blank(),
-        legend.position="bottom")
+  theme_kate()
+
 opp_montioring_dist_mean
+
 ggsave(plot = opp_montioring_dist_mean,file=paste(workdir,"graphs/opp_montioring_dist_mean.png",sep = ""),
        width = 6, height = 4, dpi = 300,units="in")
 
@@ -194,17 +214,40 @@ opp_montioring_dist_total<-ggplot(opportunities, aes(x=OppMonitorTotal,
                             size=1.5) +
   labs(x="Opportunities Monitoring",colour='Wave') +
   ggtitle("Opportunities Monitoring (total) Distribution by Wave") +
-  theme_bw() +
-  theme_minimal(base_size = 14, base_family = "Arial") +
-  theme(axis.line = element_line(colour = "black"),
-        panel.grid.major = element_blank(),
-        panel.grid.minor = element_blank(),
-        panel.border = element_blank(),
-        panel.background = element_blank(),
-        legend.position="bottom")
+  theme_kate()
+
 opp_montioring_dist_total
 ggsave(plot = opp_montioring_dist_total,file=paste(workdir,"graphs/opp_montioring_dist_total.png",sep = ""),
        width = 6, height = 4, dpi = 300,units="in")
+
+# Dating Conflict
+dating_conflict_dist_mean<-ggplot(dating_conflict, aes(x=DatingConflictMean,
+                    colour=as.factor(WID)))+
+               geom_density(alpha=.7,
+                            size=1.5) +
+  labs(x="Dating Conflict",colour='Wave') +
+  ggtitle("Dating Conflict (mean) Distribution by Wave") +
+  theme_kate()
+
+dating_conflict_dist_mean
+
+ggsave(plot = dating_conflict_dist_mean,file=paste(workdir,"graphs/dating_conflict_dist_mean.png",sep = ""),
+       width = 6, height = 4, dpi = 300,units="in")
+
+dating_conflict_dist_total<-ggplot(dating_conflict, aes(x=DatingConflictTotal,
+                    colour=as.factor(WID)))+
+               geom_density(alpha=.7,
+                            size=1.5) +
+  labs(x="Dating Conflict",colour='Wave') +
+  ggtitle("Dating Conflict (total) Distribution by Wave") +
+  theme_kate()
+
+dating_conflict_dist_total
+
+ggsave(plot = dating_conflict_dist_total,file=paste(workdir,"graphs/dating_conflict_dist_total.png",sep = ""),
+       width = 6, height = 4, dpi = 300,units="in")
+
+
 
 ```
 
@@ -257,20 +300,53 @@ anova(pubertygender_pred_oppmon)
 
 # Create data frame with IVs and
 # and Conflict dating behavior Grade 10
-thedata<-left_join((opportunities %>%
-                      filter(WID==c(5)) %>%
-                      select(SID,OppMonitorMean)),
-                   (puberty %>%
-                      filter(WID==c(1)) %>%
-                      select(SID,Puberty_Category,PDS_Female,PDS_Male,Gender,Ethnicity)),
-                    by = c("SID")) %>%
-  mutate(Gender=ifelse(Gender==0,"Female",
-                       ifelse(Gender==1,"Male",NA)),
-         Puberty=ifelse(!is.na(PDS_Female),round(PDS_Female,1),
-                        ifelse(!is.na(PDS_Male),round(PDS_Male,1),NA)))
+thedata<-left_join((dating_conflict %>%
+                      filter(WID==c(9)) %>%
+                      select(SID,DatingConflictMean)),
+                   thedata,
+                    by = c("SID"))
 
 # Since we're only looking at correlations between a single time points, use regular linear regression
-# Options are to use Puberty as a continuous variable or the Pubertal Categories
+oppmon_pred_datcon<-lm(DatingConflictMean ~ OppMonitorMean, data=thedata, na.action=na.exclude)
 
+# Check out the results
+anova(oppmon_pred_datcon)
+summary(oppmon_pred_datcon)
+
+```
+
+Plot results
+```{r}
+## Correlate Puberty Mean by Opportunity Monitor Mean
+ggplot(thedata,aes(y=OppMonitorMean,
+                   x=Puberty)) +
+  geom_point(color='maroon4',alpha=.3)+
+  geom_smooth(method=lm,
+                aes(y=OppMonitorMean,
+                   x=Puberty),
+                size=.7,
+                alpha=0.2,
+                colour="maroon1",
+                fill = "maroon1")+
+  labs(x='Puberty Grade 8',
+       y='Dating Conflict Mean Grade 10') +
+  theme_kate()
+
+
+
+## Correlate Opportunity Monitor Mean by Dating Conflict Mean
+ggplot(thedata,aes(x=OppMonitorMean,
+                   y=DatingConflictMean)) +
+  geom_point(color='maroon4',alpha=.3)+
+  geom_smooth(method=lm,
+                aes(x=OppMonitorMean,
+                    y=DatingConflictMean),
+                size=.7,
+                alpha=0.2,
+                colour="maroon1",
+                fill = "maroon1")+
+  labs(x='Opportunity Monitor Mean Grade 9',
+       y='Dating Conflict Mean Grade 10') +
+  theme_kate()
 
 ```
