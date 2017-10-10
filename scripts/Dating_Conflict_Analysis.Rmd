@@ -5,7 +5,6 @@ date: "October 3, 2017"
 output: html_document
 ---
 
-
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(
   echo = FALSE,
@@ -43,7 +42,7 @@ theme_kate <- function () {
 ```
 
 Load data
-```{r, include=FALSE}
+```{r, message=FALSE, warning=FALSE, include=FALSE}
 conn <- RODBC::odbcConnect(dsn="PInf1")
 participants <- data.table(RODBC::sqlQuery(conn,"SELECT * From PInf1.dbo.SMaster")) %>%
   select(SID,Gender,Latino,EthWhite,EthBlack,EthAsian,EthNAm,EthPacIs,EthOther)
@@ -100,7 +99,15 @@ puberty<-left_join(demographics,(surveydata %>%
                             ifelse(!PubMenses==0,PubMenses+5,NA))) %>%
   select(-PubSpurt,-PubZits,-PubHair,-PubBreast,-PubVoice,-PubFace,-PubMenses,-PubKiss) %>%
   mutate(Puberty_Category=factor(Puberty_Category,levels = c("Prepubertal", "Early Pubertal", "Midpubertal",
-                                                             "Late pubertal","Postpubertal")))
+                                                             "Late pubertal","Postpubertal"))) %>%
+  mutate(Puberty_3group=ifelse(Gender==0,
+                               ifelse(PDS_Female<=3,1,
+                                      ifelse(PDS_Female>3 & PDS_Female<3.8,2,
+                                             ifelse(PDS_Female>=3.8,3,NA))),
+                               ifelse(Gender==1,
+                                      ifelse(PDS_Female<=2.4,1,
+                                             ifelse(PDS_Female>2.4 & PDS_Female<3.2,2,
+                                                    ifelse( PDS_Female>=3.2,3,NA))),NA)))
 
 # Calculate the mean and total opportunities monitoring scores
 opportunities<-surveydata %>% 
@@ -132,7 +139,9 @@ dating_conflict<-surveydata %>%
 ```
 
 Descriptives
-```{r, message=FALSE, warning=FALSE, include=FALSE}
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+resave_graphs=FALSE
+
 # Puberty Distribution
 Female_Puberty<-ggplot(puberty, aes(x=PDS_Female,
                     colour=as.factor(WID)))+
@@ -144,8 +153,8 @@ Female_Puberty<-ggplot(puberty, aes(x=PDS_Female,
 
 Female_Puberty
 
-ggsave(plot = Female_Puberty,file=paste(workdir,"graphs/Female_PubertybyWave_dist.png",sep = ""),
-        width = 6, height = 4, dpi = 300,units="in")
+if(resave_graphs){ggsave(plot = Female_Puberty,file=paste(workdir,"graphs/Female_PubertybyWave_dist.png",sep = ""),
+        width = 6, height = 4, dpi = 300,units="in")}
 
 Male_Puberty<-ggplot(puberty, aes(x=PDS_Male,
                     colour=as.factor(WID)))+
@@ -157,8 +166,8 @@ Male_Puberty<-ggplot(puberty, aes(x=PDS_Male,
 
 Male_Puberty
 
-ggsave(plot = Male_Puberty,file=paste(workdir,"graphs/Male_PubertybyWave_dist.png",sep = ""),
-       width = 6, height = 4, dpi = 300,units="in")
+if(resave_graphs){ggsave(plot = Male_Puberty,file=paste(workdir,"graphs/Male_PubertybyWave_dist.png",sep = ""),
+       width = 6, height = 4, dpi = 300,units="in")}
 
 # Check distribution of Puberty Categories
 puberty_dist_grade<-puberty %>%
@@ -176,10 +185,11 @@ Puberty_Categories<-ggplot(puberty_dist_grade, aes(x=WID,y=count,
   ggtitle("Puberty Category Distribution") +
   theme_kate()
 Puberty_Categories
-ggsave(plot = Puberty_Categories,file=paste(workdir,"graphs/Puberty_Categories_GroupedbyWave.png",sep = ""),
-       width = 6, height = 4, dpi = 300,units="in")
+if(resave_graphs){ggsave(plot = Puberty_Categories,file=paste(workdir,"graphs/Puberty_Categories_GroupedbyWave.png",sep = ""),
+       width = 6, height = 4, dpi = 300,units="in")}
 
 wave_labels<-c("1"="8th Grade","5"="9th Grade","9"="10th Grade","11"="11th grade")
+gender_labels<-c("0" = "Female", "1" = "Male")
 Puberty_Categories<-ggplot(puberty_dist_grade, aes(x=as.factor(Gender), y=count, fill=Puberty_Category)) +
     geom_bar(colour="black", stat="identity") +
   facet_grid(.~WID,
@@ -190,8 +200,8 @@ Puberty_Categories<-ggplot(puberty_dist_grade, aes(x=as.factor(Gender), y=count,
   scale_x_discrete(labels=c("0" = "Female", "1" = "Male"))+
   theme_kate()
 Puberty_Categories
-ggsave(plot = Puberty_Categories,file=paste(workdir,"graphs/Puberty_Categories_GroupedbyGender.png",sep = ""),
-       width = 8, height = 6, dpi = 150,units="in")
+if(resave_graphs){ggsave(plot = Puberty_Categories,file=paste(workdir,"graphs/Puberty_Categories_GroupedbyGender.png",sep = ""),
+       width = 8, height = 6, dpi = 150,units="in")}
 
 
 # Opportunities Monitoring
@@ -205,8 +215,8 @@ opp_montioring_dist_mean<-ggplot(opportunities, aes(x=OppMonitorMean,
 
 opp_montioring_dist_mean
 
-ggsave(plot = opp_montioring_dist_mean,file=paste(workdir,"graphs/opp_montioring_dist_mean.png",sep = ""),
-       width = 6, height = 4, dpi = 300,units="in")
+if(resave_graphs){ggsave(plot = opp_montioring_dist_mean,file=paste(workdir,"graphs/opp_montioring_dist_mean.png",sep = ""),
+       width = 6, height = 4, dpi = 300,units="in")}
 
 opp_montioring_dist_total<-ggplot(opportunities, aes(x=OppMonitorTotal,
                     colour=as.factor(WID)))+
@@ -217,8 +227,8 @@ opp_montioring_dist_total<-ggplot(opportunities, aes(x=OppMonitorTotal,
   theme_kate()
 
 opp_montioring_dist_total
-ggsave(plot = opp_montioring_dist_total,file=paste(workdir,"graphs/opp_montioring_dist_total.png",sep = ""),
-       width = 6, height = 4, dpi = 300,units="in")
+if(resave_graphs){ggsave(plot = opp_montioring_dist_total,file=paste(workdir,"graphs/opp_montioring_dist_total.png",sep = ""),
+       width = 6, height = 4, dpi = 300,units="in")}
 
 # Dating Conflict
 dating_conflict_dist_mean<-ggplot(dating_conflict, aes(x=DatingConflictMean,
@@ -231,8 +241,8 @@ dating_conflict_dist_mean<-ggplot(dating_conflict, aes(x=DatingConflictMean,
 
 dating_conflict_dist_mean
 
-ggsave(plot = dating_conflict_dist_mean,file=paste(workdir,"graphs/dating_conflict_dist_mean.png",sep = ""),
-       width = 6, height = 4, dpi = 300,units="in")
+if(resave_graphs){ggsave(plot = dating_conflict_dist_mean,file=paste(workdir,"graphs/dating_conflict_dist_mean.png",sep = ""),
+       width = 6, height = 4, dpi = 300,units="in")}
 
 dating_conflict_dist_total<-ggplot(dating_conflict, aes(x=DatingConflictTotal,
                     colour=as.factor(WID)))+
@@ -244,15 +254,40 @@ dating_conflict_dist_total<-ggplot(dating_conflict, aes(x=DatingConflictTotal,
 
 dating_conflict_dist_total
 
-ggsave(plot = dating_conflict_dist_total,file=paste(workdir,"graphs/dating_conflict_dist_total.png",sep = ""),
-       width = 6, height = 4, dpi = 300,units="in")
+if(resave_graphs){ggsave(plot = dating_conflict_dist_total,file=paste(workdir,"graphs/dating_conflict_dist_total.png",sep = ""),
+       width = 6, height = 4, dpi = 300,units="in")}
 
+# Oldest Partner reported by Wave
+age_oldest_partner_allwaves<-surveydata %>% 
+  select(SID,WID,AgeOldBFGF2) %>%
+  filter(!is.na(AgeOldBFGF2)) %>%
+  group_by(SID) %>%
+  do({oldest_age<-(sort(.$AgeOldBFGF2,decreasing = TRUE)[[1]])
+      dplyr::mutate(.,oldest=oldest_age)
+  })
+age_partner_dist<-ggplot(left_join(age_oldest_partner_allwaves,
+                                   (demographics %>% select(SID,Gender)),
+                                   by="SID") %>% filter(!is.na(Gender)),
+                         aes(x=AgeOldBFGF2,
+                    colour=as.factor(WID)))+
+               geom_density(alpha=.7,
+                            size=1.5) +
+  facet_grid(.~as.factor(Gender),
+             scales='free',
+             labeller=as_labeller(gender_labels))+
+  labs(x="Age Oldest Partner",colour='Wave') +
+  ggtitle("Age Oldest Partner Distribution by Wave") +
+  theme_kate()
+age_partner_dist
+if(resave_graphs){ggsave(plot = age_partner_dist,
+       file=paste(workdir,"graphs/age_partner_dist.png",sep = ""),
+       width = 6, height = 4, dpi = 300,units="in")}
 
 
 ```
 
 Analyses set up
-```{r}
+```{r, message=FALSE, warning=FALSE}
 
 # Question 1:
 # Does Gender, Ethnicity, and/or Pubertal Status at Grade 8 predict likelihood to being in situations
@@ -270,12 +305,16 @@ thedata<-left_join((opportunities %>%
                       select(SID,OppMonitorMean)),
                    (puberty %>%
                       filter(WID==c(1)) %>%
-                      select(SID,Puberty_Category,PDS_Female,PDS_Male,Gender,Ethnicity)),
+                      select(SID,Puberty_Category,PDS_Female,PDS_Male,Gender,Ethnicity,Puberty_3group)),
                     by = c("SID")) %>%
   mutate(Gender=ifelse(Gender==0,"Female",
                        ifelse(Gender==1,"Male",NA)),
          Puberty=ifelse(!is.na(PDS_Female),round(PDS_Female,1),
                         ifelse(!is.na(PDS_Male),round(PDS_Male,1),NA)))
+thedata<-thedata %>%
+  mutate(Gender=as.factor(Gender),
+         Puberty_3group=as.factor(Puberty_3group),
+         Ethnicity=as.factor(Ethnicity))
 
 # Since we're only looking at correlations between a single time points, use regular linear regression
 # Options are to use Puberty as a continuous variable or the Pubertal Categories
@@ -316,7 +355,7 @@ summary(oppmon_pred_datcon)
 ```
 
 Plot results
-```{r}
+```{r, message=FALSE, warning=FALSE}
 ## Correlate Puberty Mean by Opportunity Monitor Mean
 ggplot(thedata,aes(y=OppMonitorMean,
                    x=Puberty)) +
