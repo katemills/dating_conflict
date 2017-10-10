@@ -28,6 +28,18 @@ if (length(setdiff(packages, rownames(installed.packages()))) > 0) {
 }
 lapply(packages, library, character.only = TRUE)
 workdir=substring(paste0(getwd()),0,53)
+
+# Kate's custom theme
+theme_kate <- function () { 
+    theme_bw() +
+  theme_minimal(base_size = 14, base_family = "Avenir") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank(),
+        legend.position="bottom")
+}
 ```
 
 Load data
@@ -40,7 +52,7 @@ rm(conn)
 ```
 
 Clean data
-```{r, include=FALSE}
+```{r, message=FALSE, warning=FALSE, include=FALSE}
 demographics <- participants %>%
   mutate(Ethnicity=ifelse(rowSums(select(., contains("Eth")),na.rm = TRUE)>1,"Multiethnic",
                           ifelse(rowSums(select(., contains("Eth")),na.rm = TRUE)<1,NA,
@@ -83,7 +95,9 @@ puberty<-left_join(demographics,(surveydata %>%
                                  ifelse(rowSums(cbind(PubHair,PubVoice,PubFace),na.rm=TRUE)==12,"Postpubertal",NA))))),NA)),
          PeriodStartAge=ifelse(PubMenses==0,0,
                             ifelse(!PubMenses==0,PubMenses+5,NA))) %>%
-  select(-PubSpurt,-PubZits,-PubHair,-PubBreast,-PubVoice,-PubFace,-PubMenses,-PubKiss)
+  select(-PubSpurt,-PubZits,-PubHair,-PubBreast,-PubVoice,-PubFace,-PubMenses,-PubKiss) %>%
+  mutate(Puberty_Category=factor(Puberty_Category,levels = c("Prepubertal", "Early Pubertal", "Midpubertal",
+                                                             "Late pubertal","Postpubertal")))
 
 opportunities<-surveydata %>% 
   select(SID,WID,Kiss3Mo,Laid3Mo,PartyNA3Mo) %>%
@@ -101,41 +115,60 @@ Female_Puberty<-ggplot(puberty, aes(x=PDS_Female,
                             size=1.5) +
   labs(x="Pubertal Measure",colour='Wave') +
   ggtitle("Puberty Distribution (Female)") +
-  theme_bw() +
-  theme_minimal(base_size = 14, base_family = "Arial") +
-  theme(axis.line = element_line(colour = "black"),
-        panel.grid.major = element_blank(),
-        panel.grid.minor = element_blank(),
-        panel.border = element_blank(),
-        panel.background = element_blank(),
-        legend.position="bottom")
-Female_Puberty
-ggsave(plot = Female_Puberty,file=paste(workdir,"graphs/Female_PubertybyWave_dist.png",sep = ""),
-       width = 6, height = 4, dpi = 300,units="in")
+  theme_kate()
 
-Male_Puberty<-ggplot(puberty, aes(x=Puberty_Male,
+Female_Puberty
+
+ggsave(plot = Female_Puberty,file=paste(workdir,"graphs/Female_PubertybyWave_dist.png",sep = ""),
+        width = 6, height = 4, dpi = 300,units="in")
+
+Male_Puberty<-ggplot(puberty, aes(x=PDS_Male,
                     colour=as.factor(WID)))+
                geom_density(alpha=.7,
                             size=1.5) +
   labs(x="Pubertal Measure",colour='Wave') +
   ggtitle("Puberty Distribution (Male)") +
-  theme_bw() +
-  theme_minimal(base_size = 14, base_family = "Arial") +
-  theme(axis.line = element_line(colour = "black"),
-        panel.grid.major = element_blank(),
-        panel.grid.minor = element_blank(),
-        panel.border = element_blank(),
-        panel.background = element_blank(),
-        legend.position="bottom")
+  theme_kate()
+
 Male_Puberty
+
 ggsave(plot = Male_Puberty,file=paste(workdir,"graphs/Male_PubertybyWave_dist.png",sep = ""),
        width = 6, height = 4, dpi = 300,units="in")
 
+# Check distribution of Puberty Categories
+puberty_dist_grade<-puberty %>%
+  filter(!is.na(Puberty_Category)) %>%
+  group_by(Puberty_Category,Gender,WID) %>%
+  summarize(count=n())
 
-puberty_dist_grade8<-puberty %>%
-                                  filter(WID==1,!is.na(Puberty_Category)) %>%
-                                  group_by(Puberty_Category,Gender) %>%
-                                  summarize(n()) 
+# Plot distribution of Puberty Categories
+Puberty_Categories<-ggplot(puberty_dist_grade, aes(x=WID,y=count,
+                    colour=Puberty_Category)) +
+  geom_line(aes(group=Puberty_Category), size=1)+
+  facet_grid(.~Gender,
+             scales='free')+
+  labs(x="Wave",colour="Puberty Category") +
+  ggtitle("Puberty Category Distribution") +
+  theme_kate()
+Puberty_Categories
+ggsave(plot = Puberty_Categories,file=paste(workdir,"graphs/Puberty_Categories_GroupedbyWave.png",sep = ""),
+       width = 6, height = 4, dpi = 300,units="in")
+
+wave_labels<-c("1"="8th Grade","5"="9th Grade","9"="10th Grade","11"="11th grade")
+Puberty_Categories<-ggplot(puberty_dist_grade, aes(x=as.factor(Gender), y=count, fill=Puberty_Category)) +
+    geom_bar(colour="black", stat="identity") +
+  facet_grid(.~WID,
+             scales='free',
+              labeller=as_labeller(wave_labels))+
+  labs(x="Gender",fill="Puberty Category") +
+  ggtitle("Puberty Category Distribution") +
+  scale_x_discrete(labels=c("0" = "Female", "1" = "Male"))+
+  theme_kate()
+Puberty_Categories
+ggsave(plot = Puberty_Categories,file=paste(workdir,"graphs/Puberty_Categories_GroupedbyGender.png",sep = ""),
+       width = 8, height = 6, dpi = 150,units="in")
+
+
 # Opportunities Monitoring
 opp_montioring_dist_mean<-ggplot(opportunities, aes(x=OppMonitorMean,
                     colour=as.factor(WID)))+
@@ -181,28 +214,63 @@ Analyses set up
 # Question 1:
 # Does Gender, Ethnicity, and/or Pubertal Status at Grade 8 predict likelihood to being in situations
 # where sexual risk behavior could occur?
-# IVs: a) Gender, b) Ethnicity, c) Pubertal Status at Grade 8
-# DVs: a) EMA time unsupervised w/ partner at Grade 9 +summer
-#      b) Opportunities monitoring score at Grade 9
+# IVs:  a) Gender
+#       b) Ethnicity
+#       c) Pubertal Status at Grade 8
+# DVs:  a) EMA time unsupervised w/ partner at Grade 9 + summer
+#       b) Opportunities monitoring score at Grade 9
 
-thedata<-left_join((opportunities %>% filter(WID==c(5))),
-                   (puberty %>% filter(WID==1)),
+# Create data frame with IVs + Puberty score from Grade 8
+# and Opportunities monitoring score at Grade 9
+thedata<-left_join((opportunities %>%
+                      filter(WID==c(5)) %>%
+                      select(SID,OppMonitorMean)),
+                   (puberty %>%
+                      filter(WID==c(1)) %>%
+                      select(SID,Puberty_Category,PDS_Female,PDS_Male,Gender,Ethnicity)),
                     by = c("SID")) %>%
   mutate(Gender=ifelse(Gender==0,"Female",
                        ifelse(Gender==1,"Male",NA)),
-         Puberty=ifelse(!is.na(Puberty_Female),round(Puberty_Female,0),
-                        ifelse(!is.na(Puberty_Male),round(Puberty_Male,0),NA)))
+         Puberty=ifelse(!is.na(PDS_Female),round(PDS_Female,1),
+                        ifelse(!is.na(PDS_Male),round(PDS_Male,1),NA)))
 
-gender_pred_oppmon<-lme(OppMonitorMean ~ Gender, method="ML", random = ~1|SID, data=thedata, na.action=na.exclude)
-ethnicity_pred_oppmon<-lme(OppMonitorMean ~ Ethnicity, method="ML", random = ~1|SID, data=thedata, na.action=na.exclude)
-puberty_pred_oppmon<-lme(OppMonitorMean ~ ordered(Puberty), method="ML", random = ~1|SID, data=thedata, na.action=na.exclude)
-pubertygender_pred_oppmon<-lme(OppMonitorMean ~ ordered(Puberty)*Gender, method="ML", random = ~1|SID, data=thedata, na.action=na.exclude)
+# Since we're only looking at correlations between a single time points, use regular linear regression
+# Options are to use Puberty as a continuous variable or the Pubertal Categories
+gender_pred_oppmon<-lm(OppMonitorMean ~ Gender, data=thedata, na.action=na.exclude)
+ethnicity_pred_oppmon<-lm(OppMonitorMean ~ Ethnicity, data=thedata, na.action=na.exclude)
+puberty_pred_oppmon<-lm(OppMonitorMean ~ Puberty, data=thedata, na.action=na.exclude)
+pubertygender_pred_oppmon<-lm(OppMonitorMean ~ Gender*Puberty,  data=thedata, na.action=na.exclude)
 
+# Check out the results
 anova(gender_pred_oppmon)
 anova(ethnicity_pred_oppmon)
 anova(puberty_pred_oppmon)
 anova(pubertygender_pred_oppmon)
 
+###########################################
+# Question 2:
+# What predicts conflict in dating behavior?
+# IVs:  a) EMA time unsupervised w/ partner at Grade 9 + summer
+#       b) Opportunities monitoring score at Grade 9
+#       c) Age of BF/GF Grade 10
+# DVs:  a) Conflict dating behavior Grade 10
+
+# Create data frame with IVs and
+# and Conflict dating behavior Grade 10
+thedata<-left_join((opportunities %>%
+                      filter(WID==c(5)) %>%
+                      select(SID,OppMonitorMean)),
+                   (puberty %>%
+                      filter(WID==c(1)) %>%
+                      select(SID,Puberty_Category,PDS_Female,PDS_Male,Gender,Ethnicity)),
+                    by = c("SID")) %>%
+  mutate(Gender=ifelse(Gender==0,"Female",
+                       ifelse(Gender==1,"Male",NA)),
+         Puberty=ifelse(!is.na(PDS_Female),round(PDS_Female,1),
+                        ifelse(!is.na(PDS_Male),round(PDS_Male,1),NA)))
+
+# Since we're only looking at correlations between a single time points, use regular linear regression
+# Options are to use Puberty as a continuous variable or the Pubertal Categories
 
 
 ```
