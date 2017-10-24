@@ -1,7 +1,7 @@
 ---
 title: "Dating Conflict Analysis"
 author: "Kate Mills"
-date: "October 3, 2017"
+date: "October 23, 2017"
 output: html_document
 ---
 
@@ -27,6 +27,8 @@ if (length(setdiff(packages, rownames(installed.packages()))) > 0) {
 }
 lapply(packages, library, character.only = TRUE)
 workdir=substring(paste0(getwd()),0,53)
+
+resave_graphs=FALSE
 
 # Kate's custom theme
 theme_kate <- function () { 
@@ -137,6 +139,7 @@ dating_conflict<-surveydata %>%
          AcFlirt,Fright,MadeFun,TTHurt,TTEnd,TTHit),na.rm=TRUE)) %>%
   filter(!is.na(DatingConflictMean))
 
+# Process the EMA data
 EMA_data<-EMA_waves3456 %>%
   mutate(SID=sid) %>%
   select(SID, complete, WID,WithBFGF,AdultPresent,NumAdults,Whereareyou) %>%
@@ -169,10 +172,8 @@ EMA_count <- left_join((EMA_data %>%
 ```
 
 
-Descriptives
+Descriptives of raw data
 ```{r, echo=FALSE, message=FALSE, warning=FALSE}
-resave_graphs=FALSE
-
 # Puberty Distribution
 Female_Puberty<-ggplot(puberty, aes(x=PDS_Female,
                     colour=as.factor(WID)))+
@@ -315,12 +316,68 @@ if(resave_graphs){ggsave(plot = age_partner_dist,
        width = 6, height = 4, dpi = 300,units="in")}
 ```
 
+Create dataset that has all IVs and DVs in conceptual model
+```{R}
+thedata1<-left_join((EMA_count %>%
+                      filter(WithBFGF=="Yes" & AdultPresent=="No") %>%
+                      select(SID,WID,ratio) %>%
+                      group_by(SID) %>%
+                      summarize(EMAaloneBFGF=round(mean(ratio),3))%>%
+                      ungroup()),
+                   (puberty %>%
+                      filter(WID==c(1)) %>%
+                      mutate(Puberty_2group=ifelse(Puberty_3group=="more","avg",Puberty_3group)) %>%
+                      select(SID,Gender,Latino,Puberty_3group,Puberty_2group)),
+                    by = c("SID")) 
+
+subs_noBFGFalone<-unique(EMA_count %>% 
+  filter(!SID %in% thedata1$SID) %>%
+    select(SID))
+
+thedata<-bind_rows(thedata1,
+                   (puberty %>%
+                      filter(WID==c(1)) %>%
+                      mutate(Puberty_2group=ifelse(Puberty_3group=="more","avg",Puberty_3group)) %>%
+                      select(SID,Gender,Latino,Puberty_3group,Puberty_2group) %>%
+                      filter(SID %in% subs_noBFGFalone$SID) %>%
+                      mutate(EMAaloneBFGF=0))) %>%
+  mutate(Gender=ifelse(Gender==0,"Female",
+                       ifelse(Gender==1,"Male",NA))) %>%
+  mutate(Gender=as.factor(Gender),
+         Puberty_3group=factor(Puberty_3group,levels=c("less","avg","more")),
+         Puberty_2group=factor(Puberty_2group,levels=c("less","avg")),
+         Ethnicity=as.factor(Latino))
+
+
+thedata<-left_join(thedata,(dating_conflict %>%
+                      filter(WID==c(5)) %>%
+                      select(SID,DatingConflictMean)))
+
+thedata<-left_join(thedata,(opportunities %>%
+                      filter(WID==c(5)) %>%
+                      select(SID,OppMonitorMean)),by=c("SID"))
+
+thedata<-left_join(thedata,(age_oldest_partner %>%
+                      filter(WID==c(5)) %>%
+                      select(SID,oldest)),by=c("SID"))
+
+thedata<-thedata[c("SID","Gender","Ethnicity","Puberty_3group","Puberty_2group","OppMonitorMean","oldest","EMAaloneBFGF",
+                "DatingConflictMean")] %>%
+  filter(!is.na(Gender))
+
+print(paste0("There are ",length(unique(thedata$SID))," participants in this master sample"))
+print(paste0("There are ",nrow(thedata %>%filter(Gender=="Female"))," female participants"))
+print(paste0("There are ",nrow(thedata %>%filter(Gender=="Male"))," Male participants"))
+print(paste0(nrow(thedata %>% filter(Ethnicity==1))," participants identify as Latino"))
+
+```
+
 Analyses set up
 ```{r, message=FALSE, warning=FALSE}
 
 # Question 1:
-# Does Gender, Ethnicity, and/or Pubertal Status at Grade 8 predict likelihood to being in situations
-# where sexual risk behavior could occur?
+# Does Gender, Ethnicity, and/or Pubertal Status at Grade 8 relate to the likelihood of
+# being in situations where sexual risk behavior could occur?
 # IVs:  a) Gender
 #       b) Ethnicity (identify as Latino)
 #       c) Pubertal Status at Grade 8
@@ -329,58 +386,38 @@ Analyses set up
 #       c) EMA time unsupervised w/ partner at Grade 9 + summer
 
 # Analysis 1a:
-# Create data frame with IVs and Opportunities monitoring score at Grade 9
-thedata<-left_join((opportunities %>%
-                      filter(WID==c(5)) %>%
-                      select(SID,OppMonitorMean)),
-                   (puberty %>%
-                      filter(WID==c(1)) %>%
-                      select(SID,Gender,Latino,Puberty_3group)),
-                    by = c("SID")) %>%
-  mutate(Gender=ifelse(Gender==0,"Female",
-                       ifelse(Gender==1,"Male",NA))) %>%
-  mutate(Gender=as.factor(Gender),
-         Puberty_3group=as.factor(Puberty_3group),
-         Ethnicity=as.factor(Latino))
 
-# Since we're only looking at correlations between a single time points, use regular linear regression
-gender_pred_oppmon<-lm(OppMonitorMean ~ Gender, data=thedata, na.action=na.omit)
-ethnicity_pred_oppmon<-lm(OppMonitorMean ~ Ethnicity, data=thedata, na.action=na.omit)
-gender_ethnicity_pred_oppmon<-lm(OppMonitorMean ~ Gender*Ethnicity, data=thedata, na.action=na.omit)
-puberty_pred_oppmon<-lm(OppMonitorMean ~ Puberty_3group, data=thedata, na.action=na.omit)
-puberty_gender_pred_oppmon<-lm(OppMonitorMean ~ Gender * Puberty_3group,  data=thedata, na.action=na.omit)
-puberty_ethnicity_gender_pred_oppmon<-lm(OppMonitorMean ~ Gender*Ethnicity*Puberty_3group,  data=thedata, na.action=na.omit)
+# Does gender relate to opportunities monitoring score?
+gender_oppmon<-lm(OppMonitorMean ~ Gender, data=thedata, na.action=na.omit)
+anova(gender_oppmon)  # F(1,309)=7.1982 p=0.008
+summary(gender_oppmon) # Males less likely to have opportunities to be unmonitored.
 
-# Check out the results
-anova(gender_pred_oppmon)
-summary(gender_pred_oppmon)
-anova(ethnicity_pred_oppmon)
-anova(gender_ethnicity_pred_oppmon)
-anova(puberty_pred_oppmon)
-anova(puberty_gender_pred_oppmon)
-anova(puberty_ethnicity_gender_pred_oppmon)
+# Does ethnicity relate to opportunities monitoring score?
+ethnicity_oppmon<-lm(OppMonitorMean ~ Ethnicity, data=thedata, na.action=na.omit)
+anova(ethnicity_oppmon) # no
+summary(ethnicity_oppmon)
+
+# Does pubertal status at grade 8 relate to opportunities monitoring score?
+puberty_oppmon<-lm(OppMonitorMean ~ Puberty_3group, data=thedata, na.action=na.omit)
+anova(puberty_oppmon) # no
+puberty_oppmon<-lm(OppMonitorMean ~ Puberty_2group, data=thedata %>% filter(Gender=="Female"), na.action=na.omit)
+anova(puberty_oppmon) # no
+
+# Does gender interact with puberty at grade 8 in relation to opportunities monitoring score?
+gender_puberty_oppmon<-lm(OppMonitorMean ~ Gender * Puberty_3group, data=thedata, na.action=na.omit)
+anova(gender_puberty_oppmon) # No
+
+# Does gender interact with ethnicity in relation to opportunities monitoring score?
+gender_ethnicity_oppmon<-lm(OppMonitorMean ~ Gender * Ethnicity,  data=thedata, na.action=na.omit)
+anova(gender_ethnicity_oppmon) # No
+
 
 
 # Analysis 1b:
-# Create data frame with IVs and Age oldest partner at Grade 9
-thedata<-left_join((age_oldest_partner %>%
-                      filter(WID==c(5)) %>%
-                      select(SID,oldest)),
-                   (puberty %>%
-                      filter(WID==c(1)) %>%
-                      select(SID,Gender,Latino,Puberty_3group)),
-                    by = c("SID")) %>%
-  mutate(Gender=ifelse(Gender==0,"Female",
-                       ifelse(Gender==1,"Male",NA))) %>%
-  mutate(Gender=as.factor(Gender),
-         Puberty_3group=as.factor(Puberty_3group),
-         Ethnicity=as.factor(Latino))
-
-# Since we're only looking at correlations between a single time points, use regular linear regression
 gender_pred_ageoldpartner<-lm(oldest ~ Gender, data=thedata, na.action=na.omit)
 ethnicity_pred_ageoldpartner<-lm(oldest ~ Ethnicity, data=thedata, na.action=na.omit)
 gender_ethnicity_pred_ageoldpartner<-lm(oldest ~ Gender*Ethnicity, data=thedata, na.action=na.omit)
-puberty_pred_ageoldpartner<-lm(oldest ~ Puberty_3group, data=thedata, na.action=na.omit)
+puberty_pred_ageoldpartner<-lm(oldest ~ Puberty_3group, data=thedata %>% filter(Gender=="Female"), na.action=na.omit)
 puberty_gender_pred_ageoldpartner<-lm(oldest ~ Gender * Puberty_3group,  data=thedata, na.action=na.omit)
 puberty_ethnicity_gender_pred_ageoldpartner<-lm(oldest ~ Gender*Ethnicity*Puberty_3group,  data=thedata, na.action=na.omit)
 
@@ -398,23 +435,6 @@ anova(puberty_ethnicity_gender_pred_ageoldpartner)
 
 
 # Analysis 1c:
-# Create data frame with IVs and EMA Ratio of time unsupervised w/ BFGF
-thedata<-left_join((EMA_count %>%
-                      filter(WithBFGF=="Yes" & AdultPresent=="No") %>%
-                      select(SID,WID,ratio) %>%
-                      group_by(SID) %>%
-                      summarize(EMAaloneBFGF=round(mean(ratio),3))%>%
-                      ungroup()),
-                   (puberty %>%
-                      filter(WID==c(1)) %>%
-                      select(SID,Gender,Latino,Puberty_3group)),
-                    by = c("SID")) %>%
-  mutate(Gender=ifelse(Gender==0,"Female",
-                       ifelse(Gender==1,"Male",NA))) %>%
-  mutate(Gender=as.factor(Gender),
-         Puberty_3group=as.factor(Puberty_3group),
-         Ethnicity=as.factor(Latino))
-
 # Since we're only looking at correlations between a single time points, use regular linear regression
 gender_pred_EMAaloneBFGF<-lm(EMAaloneBFGF ~ Gender, data=thedata, na.action=na.omit)
 ethnicity_pred_EMAaloneBFGF<-lm(EMAaloneBFGF ~ Ethnicity, data=thedata, na.action=na.omit)
@@ -433,31 +453,16 @@ anova(puberty_gender_pred_EMAaloneBFGF)
 anova(puberty_ethnicity_gender_pred_EMAaloneBFGF)
 
 # Analysis 1d:
-# Create data frame DVs to examine relationships
-thedata<-left_join((EMA_count %>%
-                      filter(WithBFGF=="Yes" & AdultPresent=="No") %>%
-                      select(SID,WID,ratio) %>%
-                      group_by(SID) %>%
-                      summarize(EMAaloneBFGF=round(mean(ratio),3))%>%
-                      ungroup()),
-                   (age_oldest_partner %>%
-                      filter(WID==c(5)) %>%
-                      select(SID,oldest)),
-                    by=("SID"))
-
-thedata<-left_join(thedata,(opportunities %>%
-                      filter(WID==c(5)) %>%
-                      select(SID,OppMonitorMean)),
-                   by=("SID"))
-
-# Since we're only looking at correlations between a single time points, use regular linear regression
 oppmon_pred_EMAaloneBFGF<-lm(EMAaloneBFGF ~ OppMonitorMean, data=thedata, na.action=na.omit)
 ageoldpartner_pred_EMAaloneBFGF<-lm(EMAaloneBFGF ~ oldest, data=thedata, na.action=na.omit)
+ageoldpartner_puberty_pred_EMAaloneBFGF<-lm(EMAaloneBFGF ~ oldest*Puberty_2group, data=thedata, na.action=na.omit)
 
 # Check out the results
 anova(oppmon_pred_EMAaloneBFGF)
 summary(oppmon_pred_EMAaloneBFGF)
 anova(ageoldpartner_pred_EMAaloneBFGF)
+anova(ageoldpartner_puberty_pred_EMAaloneBFGF)
+summary(ageoldpartner_puberty_pred_EMAaloneBFGF)
 
 ###########################################
 # Question 2:
@@ -471,27 +476,11 @@ anova(ageoldpartner_pred_EMAaloneBFGF)
 # DVs:  a) Conflict dating behavior Grade 10
 
 # Analysis 2a:
-# Create data frame with IVs a,b&c and Conflict dating behavior Grade 10
-thedata<-left_join((dating_conflict %>%
-                      filter(WID==c(9)) %>%
-                      select(SID,DatingConflictMean)),
-                   (puberty %>%
-                      filter(WID==c(1)) %>%
-                      select(SID,Gender,Latino,Puberty_3group)),
-                    by = c("SID")) %>%
-  mutate(Gender=ifelse(Gender==0,"Female",
-                       ifelse(Gender==1,"Male",NA))) %>%
-  mutate(Gender=as.factor(Gender),
-         Puberty_3group=as.factor(Puberty_3group),
-         Ethnicity=as.factor(Latino))
-
-
-# Since we're only looking at correlations between a single time points, use regular linear regression
 gender_pred_datingconflict<-lm(DatingConflictMean ~ Gender, data=thedata, na.action=na.omit)
 ethnicity_pred_datingconflict<-lm(DatingConflictMean ~ Ethnicity, data=thedata, na.action=na.omit)
 gender_ethnicity_pred_datingconflict<-lm(DatingConflictMean ~ Gender*Ethnicity, data=thedata, na.action=na.omit)
-puberty_pred_datingconflict<-lm(DatingConflictMean ~ Puberty_3group, data=thedata, na.action=na.omit)
-puberty_gender_pred_datingconflict<-lm(DatingConflictMean ~ Gender * Puberty_3group,  data=thedata, na.action=na.omit)
+puberty_pred_datingconflict<-lm(DatingConflictMean ~ Puberty_2group, data=thedata, na.action=na.omit)
+puberty_gender_pred_datingconflict<-lm(DatingConflictMean ~ Gender * Puberty_2group,  data=thedata, na.action=na.omit)
 puberty_ethnicity_gender_pred_datingconflict<-lm(DatingConflictMean ~ Gender*Ethnicity*Puberty_3group,  data=thedata, na.action=na.omit)
 
 # Check out the results
@@ -505,50 +494,14 @@ anova(puberty_ethnicity_gender_pred_datingconflict)
 
 
 # Analysis 2b:
-# Create data frame with IVs d,e&f and Conflict dating behavior Grade 10
-thedata<-left_join((dating_conflict %>%
-                      filter(WID==c(9)) %>%
-                      select(SID,DatingConflictMean)),
-                   (puberty %>%
-                      filter(WID==c(1)) %>%
-                      select(SID,Gender,Latino,Puberty_3group)),
-                    by = c("SID")) %>%
-  mutate(Gender=ifelse(Gender==0,"Female",
-                       ifelse(Gender==1,"Male",NA))) %>%
-  mutate(Gender=as.factor(Gender),
-         Puberty_3group=as.factor(Puberty_3group),
-         Ethnicity=as.factor(Latino))
-
-thedata<-left_join(thedata,(opportunities %>%
-                      filter(WID==c(5)) %>%
-                      select(SID,OppMonitorMean)),by=c("SID"))
-thedata<-left_join(thedata,(age_oldest_partner %>%
-                      filter(WID==c(5)) %>%
-                      select(SID,oldest)),by=c("SID"))
-thedata<-left_join(thedata,(EMA_count %>%
-                      filter(WithBFGF=="Yes" & AdultPresent=="No") %>%
-                      select(SID,WID,ratio) %>%
-                      group_by(SID) %>%
-                      summarize(EMAaloneBFGF=round(mean(ratio),3))%>%
-                      ungroup()),by=c("SID"))
-
-
-# Since we're only looking at correlations between a single time points, use regular linear regression
 oppmon_pred_datingconflict<-lm(DatingConflictMean ~ OppMonitorMean, data=thedata, na.action=na.omit)
 ageoldpartner_pred_datingconflict<-lm(DatingConflictMean ~ oldest, data=thedata, na.action=na.omit)
-EMAaloneBFGF_pred_datingconfict<-lm(DatingConflictMean ~ EMAaloneBFGF, data=thedata, na.action=na.omit)
+EMAaloneBFGF_pred_datingconflict<-lm(DatingConflictMean ~ EMAaloneBFGF, data=thedata, na.action=na.omit)
 
 anova(oppmon_pred_datingconflict)
 summary(oppmon_pred_datingconflict)
 anova(ageoldpartner_pred_datingconflict)
-anova(EMAaloneBFGF_pred_datingconfict)
-
-
-# Interactions
-oppmon_ethnicity_pred_datingconflict<-lm(DatingConflictMean ~ OppMonitorMean*Ethnicity, data=thedata, na.action=na.omit)
-
-anova(oppmon_ethnicity_pred_datingconflict)
-summary(oppmon_ethnicity_pred_datingconflict)
+anova(EMAaloneBFGF_pred_datingconflict)
 ```
 
 Plot results
