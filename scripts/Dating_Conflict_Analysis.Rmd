@@ -170,8 +170,6 @@ EMA_count <- left_join((EMA_data %>%
   mutate(ratio=round(count/totalEMA,3))
 
 ```
-
-
 Descriptives of raw data
 ```{r, echo=FALSE, message=FALSE, warning=FALSE}
 # Puberty Distribution
@@ -350,7 +348,7 @@ thedata<-bind_rows(thedata1,
 
 
 thedata<-left_join(thedata,(dating_conflict %>%
-                      filter(WID==c(5)) %>%
+                      filter(WID==c(9)) %>%
                       select(SID,DatingConflictMean)))
 
 thedata<-left_join(thedata,(opportunities %>%
@@ -373,7 +371,7 @@ print(paste0(nrow(thedata %>% filter(Ethnicity==1))," participants identify as L
 ```
 
 Analyses set up
-```{r, message=FALSE, warning=FALSE}
+```{r, message=FALSE, warning=FALSE, include=FALSE}
 
 # Question 1:
 # Does Gender, Ethnicity, and/or Pubertal Status at Grade 8 relate to the likelihood of
@@ -381,21 +379,45 @@ Analyses set up
 # IVs:  a) Gender
 #       b) Ethnicity (identify as Latino)
 #       c) Pubertal Status at Grade 8
-# DVs:  a) Opportunities monitoring score at Grade 9
-#       b) Having an older partner
-#       c) EMA time unsupervised w/ partner at Grade 9 + summer
+# DVs:  a) Opportunities monitoring score in Grade 9
+#       b) Having an older partner in Grade 9
+#       c) EMA time unsupervised w/ partner in Grade 9 + summer
 
-# Analysis 1a:
 
 # Does gender relate to opportunities monitoring score?
 gender_oppmon<-lm(OppMonitorMean ~ Gender, data=thedata, na.action=na.omit)
 anova(gender_oppmon)  # F(1,309)=7.1982 p=0.008
 summary(gender_oppmon) # Males less likely to have opportunities to be unmonitored.
 
+# Does gender relate to the age of one's oldest romantic partner in grade 9?
+gender_ageoldpartner<-lm(oldest ~ Gender, data=thedata, na.action=na.omit)
+anova(gender_ageoldpartner) # yes
+summary(gender_ageoldpartner)
+
+# Does gender relate to EMA time unsupervised w/ partner in grade 9 + summer
+gender_ema<-lm(EMAaloneBFGF ~ Gender, data=thedata, na.action=na.omit)
+anova(gender_ema) # no
+summary(gender_ema)
+
 # Does ethnicity relate to opportunities monitoring score?
 ethnicity_oppmon<-lm(OppMonitorMean ~ Ethnicity, data=thedata, na.action=na.omit)
 anova(ethnicity_oppmon) # no
 summary(ethnicity_oppmon)
+
+# Does ethnicity relate to the age of one's oldest romantic partner in grade 9?
+ethnicity_ageoldpartner<-lm(oldest ~ Ethnicity, data=thedata, na.action=na.omit)
+anova(ethnicity_ageoldpartner) # yes
+summary(ethnicity_ageoldpartner)
+
+# Does ethnicity relate to EMA time unsupervised w/ partner in grade 9 + summer
+ethnicity_ema<-lm(EMAaloneBFGF ~ Ethnicity, data=thedata, na.action=na.omit)
+anova(ethnicity_ema) # no
+summary(ethnicity_ema)
+
+# Does gender and ethnicity interact in relation to to the age of one's oldest romantic partner in grade 9?
+gender_ethnicity_ageoldpartner<-lm(oldest ~ Gender* Ethnicity, data=thedata, na.action=na.omit)
+anova(gender_ethnicity_ageoldpartner) # yes
+summary(gender_ethnicity_ageoldpartner)
 
 # Does pubertal status at grade 8 relate to opportunities monitoring score?
 puberty_oppmon<-lm(OppMonitorMean ~ Puberty_3group, data=thedata, na.action=na.omit)
@@ -403,66 +425,38 @@ anova(puberty_oppmon) # no
 puberty_oppmon<-lm(OppMonitorMean ~ Puberty_2group, data=thedata %>% filter(Gender=="Female"), na.action=na.omit)
 anova(puberty_oppmon) # no
 
-# Does gender interact with puberty at grade 8 in relation to opportunities monitoring score?
+# Does pubertal status at grade 8 interact with gender interact in relation to opportunities monitoring score?
 gender_puberty_oppmon<-lm(OppMonitorMean ~ Gender * Puberty_3group, data=thedata, na.action=na.omit)
 anova(gender_puberty_oppmon) # No
 
-# Does gender interact with ethnicity in relation to opportunities monitoring score?
-gender_ethnicity_oppmon<-lm(OppMonitorMean ~ Gender * Ethnicity,  data=thedata, na.action=na.omit)
-anova(gender_ethnicity_oppmon) # No
+# Does pubertal status at grade 8 relate to the age of one's oldest romantic partner in grade 9?
+puberty_ageoldpartner<-lm(oldest ~ Puberty_2group, data=thedata, na.action=na.omit)
+anova(puberty_ageoldpartner) # yes
+summary(puberty_ageoldpartner)
 
+# Does pubertal status at grade 8 relate to EMA time unsupervised w/ partner in grade 9 + summer
+puberty_ema<-lm(EMAaloneBFGF ~ Puberty_2group, data=thedata, na.action=na.omit)
+anova(puberty_ema) # No
 
+# Does pubertal status at grade 8 interact with ethnicity and gender to 
+# relate to the age of one's oldest romantic partner in grade 9?
+puberty_gender_ethnicity_ageoldpartner<-lm(oldest ~ Puberty_2group*Gender*Ethnicity, data=thedata, na.action=na.omit)
+anova(puberty_gender_ethnicity_ageoldpartner) # no
+summary(puberty_gender_ethnicity_ageoldpartner)
 
-# Analysis 1b:
-gender_pred_ageoldpartner<-lm(oldest ~ Gender, data=thedata, na.action=na.omit)
-ethnicity_pred_ageoldpartner<-lm(oldest ~ Ethnicity, data=thedata, na.action=na.omit)
-gender_ethnicity_pred_ageoldpartner<-lm(oldest ~ Gender*Ethnicity, data=thedata, na.action=na.omit)
-puberty_pred_ageoldpartner<-lm(oldest ~ Puberty_3group, data=thedata %>% filter(Gender=="Female"), na.action=na.omit)
-puberty_gender_pred_ageoldpartner<-lm(oldest ~ Gender * Puberty_3group,  data=thedata, na.action=na.omit)
-puberty_ethnicity_gender_pred_ageoldpartner<-lm(oldest ~ Gender*Ethnicity*Puberty_3group,  data=thedata, na.action=na.omit)
+# How do our measures of opportunties to have risky sexual behavior correlate?
+oppmon_EMAaloneBFGF<-lm(EMAaloneBFGF ~ OppMonitorMean, data=thedata, na.action=na.omit)
+anova(oppmon_EMAaloneBFGF) # yes
+summary(oppmon_EMAaloneBFGF)
 
-# Check out the results
-anova(gender_pred_ageoldpartner)
-summary(gender_pred_ageoldpartner)
-anova(ethnicity_pred_ageoldpartner)
-summary(ethnicity_pred_ageoldpartner)
-anova(gender_ethnicity_pred_ageoldpartner)
-summary(gender_ethnicity_pred_ageoldpartner)
-anova(puberty_pred_ageoldpartner)
-summary(puberty_pred_ageoldpartner)
-anova(puberty_gender_pred_ageoldpartner)
-anova(puberty_ethnicity_gender_pred_ageoldpartner)
+ageoldpartner_oppmon<-lm(OppMonitorMean ~ oldest, data=thedata, na.action=na.omit)
+anova(ageoldpartner_oppmon) # yes
+summary(ageoldpartner_oppmon)
 
+ageoldpartner_EMAaloneBFGF<-lm(EMAaloneBFGF ~ oldest, data=thedata, na.action=na.omit)
+anova(ageoldpartner_EMAaloneBFGF) #yes
+summary(ageoldpartner_EMAaloneBFGF)
 
-# Analysis 1c:
-# Since we're only looking at correlations between a single time points, use regular linear regression
-gender_pred_EMAaloneBFGF<-lm(EMAaloneBFGF ~ Gender, data=thedata, na.action=na.omit)
-ethnicity_pred_EMAaloneBFGF<-lm(EMAaloneBFGF ~ Ethnicity, data=thedata, na.action=na.omit)
-gender_ethnicity_pred_EMAaloneBFGF<-lm(EMAaloneBFGF ~ Gender*Ethnicity, data=thedata, na.action=na.omit)
-puberty_pred_EMAaloneBFGF<-lm(EMAaloneBFGF ~ Puberty_3group, data=thedata, na.action=na.omit)
-puberty_gender_pred_EMAaloneBFGF<-lm(EMAaloneBFGF ~ Gender * Puberty_3group,  data=thedata, na.action=na.omit)
-puberty_ethnicity_gender_pred_EMAaloneBFGF<-lm(EMAaloneBFGF ~ Gender*Ethnicity*Puberty_3group,  data=thedata, na.action=na.omit)
-
-# Check out the results
-anova(gender_pred_EMAaloneBFGF)
-summary(gender_pred_EMAaloneBFGF)
-anova(ethnicity_pred_EMAaloneBFGF)
-anova(gender_ethnicity_pred_EMAaloneBFGF)
-anova(puberty_pred_EMAaloneBFGF)
-anova(puberty_gender_pred_EMAaloneBFGF)
-anova(puberty_ethnicity_gender_pred_EMAaloneBFGF)
-
-# Analysis 1d:
-oppmon_pred_EMAaloneBFGF<-lm(EMAaloneBFGF ~ OppMonitorMean, data=thedata, na.action=na.omit)
-ageoldpartner_pred_EMAaloneBFGF<-lm(EMAaloneBFGF ~ oldest, data=thedata, na.action=na.omit)
-ageoldpartner_puberty_pred_EMAaloneBFGF<-lm(EMAaloneBFGF ~ oldest*Puberty_2group, data=thedata, na.action=na.omit)
-
-# Check out the results
-anova(oppmon_pred_EMAaloneBFGF)
-summary(oppmon_pred_EMAaloneBFGF)
-anova(ageoldpartner_pred_EMAaloneBFGF)
-anova(ageoldpartner_puberty_pred_EMAaloneBFGF)
-summary(ageoldpartner_puberty_pred_EMAaloneBFGF)
 
 ###########################################
 # Question 2:
@@ -476,32 +470,37 @@ summary(ageoldpartner_puberty_pred_EMAaloneBFGF)
 # DVs:  a) Conflict dating behavior Grade 10
 
 # Analysis 2a:
-gender_pred_datingconflict<-lm(DatingConflictMean ~ Gender, data=thedata, na.action=na.omit)
-ethnicity_pred_datingconflict<-lm(DatingConflictMean ~ Ethnicity, data=thedata, na.action=na.omit)
-gender_ethnicity_pred_datingconflict<-lm(DatingConflictMean ~ Gender*Ethnicity, data=thedata, na.action=na.omit)
-puberty_pred_datingconflict<-lm(DatingConflictMean ~ Puberty_2group, data=thedata, na.action=na.omit)
-puberty_gender_pred_datingconflict<-lm(DatingConflictMean ~ Gender * Puberty_2group,  data=thedata, na.action=na.omit)
-puberty_ethnicity_gender_pred_datingconflict<-lm(DatingConflictMean ~ Gender*Ethnicity*Puberty_3group,  data=thedata, na.action=na.omit)
 
-# Check out the results
-anova(gender_pred_datingconflict)
-anova(ethnicity_pred_datingconflict)
-summary(ethnicity_pred_datingconflict)
-anova(gender_ethnicity_pred_datingconflict)
-anova(puberty_pred_datingconflict)
-anova(puberty_gender_pred_datingconflict)
-anova(puberty_ethnicity_gender_pred_datingconflict)
+# Does gender relate to conflict dating behavior Grade 10?
+gender_conflict<-lm(DatingConflictMean ~ Gender, data=thedata, na.action=na.omit)
+anova(gender_conflict) # No
 
+# Does ethnicity relate to conflict dating behavior Grade 10?
+ethnicity_conflict<-lm(DatingConflictMean ~ Ethnicity, data=thedata, na.action=na.omit)
+anova(ethnicity_conflict) # No
 
-# Analysis 2b:
-oppmon_pred_datingconflict<-lm(DatingConflictMean ~ OppMonitorMean, data=thedata, na.action=na.omit)
-ageoldpartner_pred_datingconflict<-lm(DatingConflictMean ~ oldest, data=thedata, na.action=na.omit)
-EMAaloneBFGF_pred_datingconflict<-lm(DatingConflictMean ~ EMAaloneBFGF, data=thedata, na.action=na.omit)
+# Does pubertal status at grade 8 relate to conflict dating behavior Grade 10?
+puberty_conflict<-lm(DatingConflictMean ~ Puberty_2group, data=thedata, na.action=na.omit)
+anova(puberty_conflict) # No
 
-anova(oppmon_pred_datingconflict)
-summary(oppmon_pred_datingconflict)
-anova(ageoldpartner_pred_datingconflict)
-anova(EMAaloneBFGF_pred_datingconflict)
+# Does having had an older romantic partner by grade 9 relate to conflict dating behavior Grade 10?
+oldest_conflict<-lm(DatingConflictMean ~ oldest*EMAaloneBFGF, data=thedata, na.action=na.omit)
+anova(oldest_conflict) # No
+
+# Does having opportunties to engage in risky sexual activity relate to conflict dating behavior Grade 10?
+oppmon_conflict<-lm(DatingConflictMean ~ OppMonitorMean, data=thedata, na.action=na.omit)
+anova(oppmon_conflict) # yes
+summary(oppmon_conflict) 
+
+# Does having opportunties to engage in risky sexual activity (EMA) relate to conflict dating behavior Grade 10?
+ema_conflict<-lm(DatingConflictMean ~ EMAaloneBFGF, data=thedata, na.action=na.omit)
+anova(ema_conflict) #no
+
+# Do our measures of opportunities to engage in risky sexual activity interact to relate to conflict dating behavior Grade 10?
+oppmon_ema_conflict<-lm(DatingConflictMean ~ OppMonitorMean+EMAaloneBFGF, data=thedata, na.action=na.omit)
+anova(oppmon_ema_conflict) # no
+summary(oppmon_ema_conflict)
+
 ```
 
 Plot results
@@ -539,3 +538,18 @@ ggplot(thedata,aes(x=OppMonitorMean,
   theme_kate()
 
 ```
+
+Side project for Julie: correlations between different parental monitoring assessments
+```{r}
+conn <- RODBC::odbcConnect(dsn="PInf1")
+child_survey <- data.table(RODBC::sqlQuery(conn,"SELECT * From PInf1.dbo.SWave"))
+rm(conn)
+EMA_waves3456<-read.csv("../../EMA_Wave3456.csv",header=TRUE,stringsAsFactors = FALSE)
+
+
+
+```
+
+
+
+
