@@ -1,15 +1,15 @@
 ---
 title: "Dating Conflict Analysis"
 author: "Kate Mills"
-date: "October 23, 2017"
+date: "November 7", 2017"
 output: html_document
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(
-  echo = FALSE,
-  message = FALSE,
-  warning = FALSE
+	echo = FALSE,
+	message = FALSE,
+	warning = FALSE
 )
 ```
 
@@ -170,8 +170,14 @@ EMA_count <- left_join((EMA_data %>%
   mutate(ratio=round(count/totalEMA,3))
 
 ```
+
 Descriptives of raw data
 ```{r, echo=FALSE, message=FALSE, warning=FALSE}
+
+# Set labels
+wave_labels<-c("1"="8th Grade","5"="9th Grade","9"="10th Grade","11"="11th grade")
+gender_labels<-c("0" = "Female", "1" = "Male")
+
 # Puberty Distribution
 Female_Puberty<-ggplot(puberty, aes(x=PDS_Female,
                     colour=as.factor(WID)))+
@@ -180,7 +186,6 @@ Female_Puberty<-ggplot(puberty, aes(x=PDS_Female,
   labs(x="Pubertal Measure",colour='Wave') +
   ggtitle("Puberty Distribution (Female)") +
   theme_kate()
-
 Female_Puberty
 
 if(resave_graphs){ggsave(plot = Female_Puberty,file=paste(workdir,"graphs/Female_PubertybyWave_dist.png",sep = ""),
@@ -210,16 +215,15 @@ Puberty_Categories<-ggplot(puberty_dist_grade, aes(x=WID,y=count,
                     colour=Puberty_Category)) +
   geom_line(aes(group=Puberty_Category), size=1)+
   facet_grid(.~Gender,
-             scales='free')+
+             scales='free',
+             labeller=as_labeller(gender_labels))+
   labs(x="Wave",colour="Puberty Category") +
   ggtitle("Puberty Category Distribution") +
-  theme_kate()
+  theme_kate()+theme(legend.position="bottom")
 Puberty_Categories
 if(resave_graphs){ggsave(plot = Puberty_Categories,file=paste(workdir,"graphs/Puberty_Categories_GroupedbyWave.png",sep = ""),
        width = 6, height = 4, dpi = 300,units="in")}
 
-wave_labels<-c("1"="8th Grade","5"="9th Grade","9"="10th Grade","11"="11th grade")
-gender_labels<-c("0" = "Female", "1" = "Male")
 Puberty_Categories<-ggplot(puberty_dist_grade, aes(x=as.factor(Gender), y=count, fill=Puberty_Category)) +
     geom_bar(colour="black", stat="identity") +
   facet_grid(.~WID,
@@ -261,6 +265,104 @@ if(resave_graphs){ggsave(plot = opp_montioring_dist_total,file=paste(workdir,"gr
        width = 6, height = 4, dpi = 300,units="in")}
 
 # Dating Conflict
+## Item level
+dating_conflict_des_item<-gather(dating_conflict[1:16],"item","value",3:16) %>%
+  group_by(WID,item) %>%
+  summarize(mean=round(mean(value),3),
+            count=sum(value>0)) %>%
+  ungroup()
+
+dating_conflict_item_count<-ggplot(dating_conflict_des_item, aes(x=WID,y=count,
+                    colour=item)) +
+  geom_line(aes(group=item), size=1)+
+  labs(x="Wave",colour="CADRI Item") +
+  ggtitle("CADRI Item Count") +
+  theme_kate()+theme(legend.position="bottom")
+dating_conflict_item_count
+if(resave_graphs){ggsave(plot = dating_conflict_item_count,
+                         file=paste(workdir,"graphs/dating_conflict_item_count.png",sep = ""),
+                         width = 6, height = 4, dpi = 300,units="in")}
+
+dating_conflict_item_mean<-ggplot(dating_conflict_des_item, aes(x=WID,y=mean,
+                    colour=item)) +
+  geom_line(aes(group=item), size=1)+
+  labs(x="Wave",colour="CADRI Item") +
+  ggtitle("CADRI Item mean") +
+  theme_kate()+theme(legend.position="bottom")
+dating_conflict_item_mean
+if(resave_graphs){ggsave(plot = dating_conflict_item_mean,
+                         file=paste(workdir,"graphs/dating_conflict_item_mean.png",sep = ""),
+                         width = 6, height = 4, dpi = 300,units="in")}
+
+## Subscale level
+dating_conflict_subscale<-dating_conflict %>%
+  mutate(threatening_mean=round(rowMeans(cbind(IValued,Fright,TTHurt,TTHit),na.rm=FALSE),2),
+         threatening_total=round(rowSums(cbind(IValued,Fright,TTHurt,TTHit),na.rm=TRUE),2),
+         verbal_mean=round(rowMeans(cbind(Jealous,IDone,MeAngry,MeanTone,PutDown,KepTrak,BlaMe,
+         AcFlirt,MadeFun,TTEnd),na.rm=FALSE),2),
+         verbal_total=round(rowSums(cbind(Jealous,IDone,MeAngry,MeanTone,PutDown,KepTrak,BlaMe,
+         AcFlirt,MadeFun,TTEnd),na.rm=TRUE),2))%>%
+  select(WID,SID,contains("_mean"),contains("_total")) %>%
+  gather("subscale","value",3:6) 
+
+dating_conflict_sum_subscale<-dating_conflict_subscale%>%
+  group_by(WID,subscale) %>%
+  summarize(mean=round(mean(value),3),
+            min=round(min(value),3),
+            max=round(max(value),3),
+            sd=round(sd(value),3)) %>% 
+  ungroup()
+
+dating_conflict_subscale_mean_wave11<-ggplot(data=dating_conflict_subscale %>%
+                                        filter(grepl("mean",subscale)) %>%
+                                        filter(!is.na(value)) %>%
+                                        filter(WID==11),
+                                      aes(x=value)) + 
+  geom_histogram(breaks=seq(0, 3, by=.2), 
+                 colour="dodgerblue", 
+                 fill="dodgerblue", 
+                 alpha = .2)+
+     facet_grid(.~subscale,
+             scales='free') +
+  ggtitle("CADRI Subscale (Mean) Distribution Wave 11") +
+  theme_kate()+theme(legend.position="bottom")
+dating_conflict_subscale_mean_wave11
+if(resave_graphs){ggsave(plot = dating_conflict_subscale_mean_wave11,
+                         file=paste(workdir,"graphs/CADRI_Subscales_Wave11.png",sep = ""),
+       width = 6, height = 4, dpi = 300,units="in")}
+
+dating_conflict_subscale_mean<-ggplot(dating_conflict_sum_subscale%>%
+                                        filter(grepl("mean",subscale)),
+                  aes(x=as.factor(WID),y=mean,colour=subscale)) +
+  geom_point(position=position_dodge(.1),aes(colour=subscale), size=2) +
+  geom_errorbar(position=position_dodge(.1), 
+                aes(ymax=mean + sd, ymin=mean - sd,colour=subscale),
+                width=0.5) +
+  labs(x='Wave', y='CADRI subscale mean') +
+  theme_kate()+theme(legend.position="bottom")
+dating_conflict_subscale_mean
+if(resave_graphs){ggsave(plot = dating_conflict_subscale_mean,
+                         file=paste(workdir,"graphs/CADRI_Subscales_MeanbyWave.png",sep = ""),
+       width = 6, height = 4, dpi = 300,units="in")}
+
+
+
+dating_conflict_subscale_total<-ggplot(dating_conflict_sum_subscale%>%
+                                        filter(grepl("total",subscale)),
+                  aes(x=as.factor(WID),y=mean,colour=subscale)) +
+  geom_point(position=position_dodge(.1),aes(colour=subscale), size=2) +
+  geom_errorbar(position=position_dodge(.1), 
+                aes(ymax=mean + sd, ymin=mean - sd,colour=subscale),
+                width=0.5) +
+  labs(x='Wave', y='CADRI subscale total') +
+  theme_kate()+theme(legend.position="bottom")
+dating_conflict_subscale_total
+if(resave_graphs){ggsave(plot = dating_conflict_subscale_total,
+                         file=paste(workdir,"graphs/CADRI_Subscales_TotalbyWave.png",sep = ""),
+       width = 6, height = 4, dpi = 300,units="in")}
+
+
+## Overall
 dating_conflict_dist_mean<-ggplot(dating_conflict, aes(x=DatingConflictMean,
                     colour=as.factor(WID)))+
                geom_density(alpha=.7,
@@ -268,9 +370,7 @@ dating_conflict_dist_mean<-ggplot(dating_conflict, aes(x=DatingConflictMean,
   labs(x="Dating Conflict",colour='Wave') +
   ggtitle("Dating Conflict (mean) Distribution by Wave") +
   theme_kate()
-
 dating_conflict_dist_mean
-
 if(resave_graphs){ggsave(plot = dating_conflict_dist_mean,file=paste(workdir,"graphs/dating_conflict_dist_mean.png",sep = ""),
        width = 6, height = 4, dpi = 300,units="in")}
 
@@ -280,8 +380,7 @@ dating_conflict_dist_total<-ggplot(dating_conflict, aes(x=DatingConflictTotal,
                             size=1.5) +
   labs(x="Dating Conflict",colour='Wave') +
   ggtitle("Dating Conflict (total) Distribution by Wave") +
-  theme_kate()
-
+  theme_kate()+theme(legend.position="bottom")
 dating_conflict_dist_total
 
 if(resave_graphs){ggsave(plot = dating_conflict_dist_total,file=paste(workdir,"graphs/dating_conflict_dist_total.png",sep = ""),
@@ -347,21 +446,47 @@ thedata<-bind_rows(thedata1,
          Ethnicity=as.factor(Latino))
 
 
-thedata<-left_join(thedata,(dating_conflict %>%
+thedata<-full_join(thedata,(dating_conflict %>%
                       filter(WID==c(9)) %>%
                       select(SID,DatingConflictMean)))
 
-thedata<-left_join(thedata,(opportunities %>%
+thedata<-full_join(thedata,(opportunities %>%
                       filter(WID==c(5)) %>%
                       select(SID,OppMonitorMean)),by=c("SID"))
 
-thedata<-left_join(thedata,(age_oldest_partner %>%
+thedata<-full_join(thedata,(age_oldest_partner %>%
                       filter(WID==c(5)) %>%
                       select(SID,oldest)),by=c("SID"))
 
 thedata<-thedata[c("SID","Gender","Ethnicity","Puberty_3group","Puberty_2group","OppMonitorMean","oldest","EMAaloneBFGF",
                 "DatingConflictMean")] %>%
-  filter(!is.na(Gender))
+  filter(!is.na(Gender)) 
+
+thedata<-filter(thedata, Gender=="Female")
+####
+length(na.omit(thedata$OppMonitorMean))
+mean(thedata$OppMonitorMean,na.rm=TRUE)
+sd(thedata$OppMonitorMean,na.rm=TRUE)
+median(thedata$OppMonitorMean,na.rm=TRUE)
+range(thedata$OppMonitorMean,na.rm=TRUE)
+
+length(na.omit(thedata$EMAaloneBFGF))
+mean(thedata$EMAaloneBFGF,na.rm=TRUE)
+sd(thedata$EMAaloneBFGF,na.rm=TRUE)
+median(thedata$EMAaloneBFGF,na.rm=TRUE)
+range(thedata$EMAaloneBFGF,na.rm=TRUE)
+
+length(na.omit(thedata$DatingConflictMean))
+mean(thedata$DatingConflictMean,na.rm=TRUE)
+sd(thedata$DatingConflictMean,na.rm=TRUE)
+median(thedata$DatingConflictMean,na.rm=TRUE)
+range(thedata$DatingConflictMean,na.rm=TRUE)
+
+length(na.omit(thedata$DatingConflictMean))
+mean(thedata$DatingConflictMean,na.rm=TRUE)
+sd(thedata$DatingConflictMean,na.rm=TRUE)
+median(thedata$DatingConflictMean,na.rm=TRUE)
+range(thedata$DatingConflictMean,na.rm=TRUE)
 
 print(paste0("There are ",length(unique(thedata$SID))," participants in this master sample"))
 print(paste0("There are ",nrow(thedata %>%filter(Gender=="Female"))," female participants"))
