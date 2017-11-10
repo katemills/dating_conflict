@@ -1,7 +1,7 @@
 ---
 title: "Dating Conflict Analysis"
 author: "Kate Mills"
-date: "November 7", 2017"
+date: "November 10, 2017"
 output: html_document
 ---
 
@@ -137,6 +137,12 @@ dating_conflict<-surveydata %>%
          AcFlirt,Fright,MadeFun,TTHurt,TTEnd,TTHit),na.rm=FALSE),2),
          DatingConflictTotal=rowSums(cbind(Jealous,IValued,IDone,MeAngry,MeanTone,PutDown,KepTrak,BlaMe,
          AcFlirt,Fright,MadeFun,TTHurt,TTEnd,TTHit),na.rm=TRUE)) %>%
+  mutate(threatening_mean=round(rowMeans(cbind(IValued,Fright,TTHurt,TTHit),na.rm=FALSE),2),
+         threatening_total=round(rowSums(cbind(IValued,Fright,TTHurt,TTHit),na.rm=TRUE),2),
+         verbal_mean=round(rowMeans(cbind(Jealous,IDone,MeAngry,MeanTone,PutDown,KepTrak,BlaMe,
+         AcFlirt,MadeFun,TTEnd),na.rm=FALSE),2),
+         verbal_total=round(rowSums(cbind(Jealous,IDone,MeAngry,MeanTone,PutDown,KepTrak,BlaMe,
+         AcFlirt,MadeFun,TTEnd),na.rm=TRUE),2)) %>%
   filter(!is.na(DatingConflictMean))
 
 # Process the EMA data
@@ -169,6 +175,16 @@ EMA_count <- left_join((EMA_data %>%
   by=c("SID","WID")) %>%
   mutate(ratio=round(count/totalEMA,3))
 
+# Calculate willingness and intentions to have risky sex
+willint_risky_sex<-surveydata %>% 
+  select(SID,WID,HaveGfBf,PullOut,HaveSElse,AptOralSex,AptSex,AptSexCondom,PlanUnproSex,YrUnproSex) %>%
+  mutate(WillingRiskySexMean=round(rowMeans(cbind(HaveGfBf,PullOut,HaveSElse,AptOralSex,AptSex,AptSexCondom),na.rm=FALSE),2),
+         WillingRiskySexTotal=rowSums(cbind(HaveGfBf,PullOut,HaveSElse,AptOralSex,AptSex,AptSexCondom),na.rm=TRUE),
+         IntentionRiskSexMean=round(rowMeans(cbind(PlanUnproSex,YrUnproSex),na.rm=FALSE),2),
+         IntentionRiskSexTotal=rowSums(cbind(PlanUnproSex,YrUnproSex),na.rm=TRUE)) %>%
+  filter(!is.na(IntentionRiskSexMean & WillingRiskySexMean))
+
+
 ```
 
 Descriptives of raw data
@@ -177,8 +193,10 @@ Descriptives of raw data
 # Set labels
 wave_labels<-c("1"="8th Grade","5"="9th Grade","9"="10th Grade","11"="11th grade")
 gender_labels<-c("0" = "Female", "1" = "Male")
+latino_labels<-c("0" = "Not Latino", "1" = "Latino")
 
 # Puberty Distribution
+## Females
 Female_Puberty<-ggplot(puberty, aes(x=PDS_Female,
                     colour=as.factor(WID)))+
                geom_density(alpha=.7,
@@ -187,10 +205,10 @@ Female_Puberty<-ggplot(puberty, aes(x=PDS_Female,
   ggtitle("Puberty Distribution (Female)") +
   theme_kate()
 Female_Puberty
-
 if(resave_graphs){ggsave(plot = Female_Puberty,file=paste(workdir,"graphs/Female_PubertybyWave_dist.png",sep = ""),
         width = 6, height = 4, dpi = 300,units="in")}
 
+## Males
 Male_Puberty<-ggplot(puberty, aes(x=PDS_Male,
                     colour=as.factor(WID)))+
                geom_density(alpha=.7,
@@ -198,9 +216,7 @@ Male_Puberty<-ggplot(puberty, aes(x=PDS_Male,
   labs(x="Pubertal Measure",colour='Wave') +
   ggtitle("Puberty Distribution (Male)") +
   theme_kate()
-
 Male_Puberty
-
 if(resave_graphs){ggsave(plot = Male_Puberty,file=paste(workdir,"graphs/Male_PubertybyWave_dist.png",sep = ""),
        width = 6, height = 4, dpi = 300,units="in")}
 
@@ -448,7 +464,7 @@ thedata<-bind_rows(thedata1,
 
 thedata<-full_join(thedata,(dating_conflict %>%
                       filter(WID==c(9)) %>%
-                      select(SID,DatingConflictMean)))
+                      select(SID,DatingConflictMean,threatening_mean,verbal_mean)))
 
 thedata<-full_join(thedata,(opportunities %>%
                       filter(WID==c(5)) %>%
@@ -458,44 +474,125 @@ thedata<-full_join(thedata,(age_oldest_partner %>%
                       filter(WID==c(5)) %>%
                       select(SID,oldest)),by=c("SID"))
 
+thedata<-full_join(thedata,(willint_risky_sex %>%
+                              filter(WID==c(9)) %>%
+                              select(SID,WillingRiskySexMean,IntentionRiskSexTotal)))
+
 thedata<-thedata[c("SID","Gender","Ethnicity","Puberty_3group","Puberty_2group","OppMonitorMean","oldest","EMAaloneBFGF",
-                "DatingConflictMean")] %>%
+                "DatingConflictMean","threatening_mean","verbal_mean","WillingRiskySexMean","IntentionRiskSexTotal")] %>%
   filter(!is.na(Gender)) 
 
-thedata<-filter(thedata, Gender=="Female")
-####
-length(na.omit(thedata$OppMonitorMean))
-mean(thedata$OppMonitorMean,na.rm=TRUE)
-sd(thedata$OppMonitorMean,na.rm=TRUE)
-median(thedata$OppMonitorMean,na.rm=TRUE)
-range(thedata$OppMonitorMean,na.rm=TRUE)
+thedata_female<-filter(thedata, Gender=="Female")
+thedata_male<-filter(thedata, Gender=="Male")
 
-length(na.omit(thedata$EMAaloneBFGF))
-mean(thedata$EMAaloneBFGF,na.rm=TRUE)
-sd(thedata$EMAaloneBFGF,na.rm=TRUE)
-median(thedata$EMAaloneBFGF,na.rm=TRUE)
-range(thedata$EMAaloneBFGF,na.rm=TRUE)
+# Print stats for descriptives table #
 
-length(na.omit(thedata$DatingConflictMean))
-mean(thedata$DatingConflictMean,na.rm=TRUE)
-sd(thedata$DatingConflictMean,na.rm=TRUE)
-median(thedata$DatingConflictMean,na.rm=TRUE)
-range(thedata$DatingConflictMean,na.rm=TRUE)
+## Opportunities Monitoring
+print(paste(length(na.omit(thedata$OppMonitorMean)),round(mean(thedata$OppMonitorMean,na.rm=TRUE),2),
+             round(sd(thedata$OppMonitorMean,na.rm=TRUE),3),round(median(thedata$OppMonitorMean,na.rm=TRUE),2),
+             round(min(thedata$OppMonitorMean,na.rm=TRUE),2),round(max(thedata$OppMonitorMean,na.rm=TRUE),2),sep = ","))
+### Females
+print(paste(length(na.omit(thedata_female$OppMonitorMean)),round(mean(thedata_female$OppMonitorMean,na.rm=TRUE),2),
+             round(sd(thedata_female$OppMonitorMean,na.rm=TRUE),3),round(median(thedata_female$OppMonitorMean,na.rm=TRUE),2),
+             round(min(thedata_female$OppMonitorMean,na.rm=TRUE),2),round(max(thedata_female$OppMonitorMean,na.rm=TRUE),2),sep = ","))
 
-length(na.omit(thedata$DatingConflictMean))
-mean(thedata$DatingConflictMean,na.rm=TRUE)
-sd(thedata$DatingConflictMean,na.rm=TRUE)
-median(thedata$DatingConflictMean,na.rm=TRUE)
-range(thedata$DatingConflictMean,na.rm=TRUE)
+### Males
+print(paste(length(na.omit(thedata_male$OppMonitorMean)),round(mean(thedata_male$OppMonitorMean,na.rm=TRUE),2),
+             round(sd(thedata_male$OppMonitorMean,na.rm=TRUE),3),round(median(thedata_male$OppMonitorMean,na.rm=TRUE),2),
+             round(min(thedata_male$OppMonitorMean,na.rm=TRUE),2),round(max(thedata_male$OppMonitorMean,na.rm=TRUE),2),sep = ","))
 
-print(paste0("There are ",length(unique(thedata$SID))," participants in this master sample"))
-print(paste0("There are ",nrow(thedata %>%filter(Gender=="Female"))," female participants"))
-print(paste0("There are ",nrow(thedata %>%filter(Gender=="Male"))," Male participants"))
-print(paste0(nrow(thedata %>% filter(Ethnicity==1))," participants identify as Latino"))
+## EMA
+print(paste(length(na.omit(thedata$EMAaloneBFGF)),round(mean(thedata$EMAaloneBFGF,na.rm=TRUE),2),
+             round(sd(thedata$EMAaloneBFGF,na.rm=TRUE),3),round(median(thedata$EMAaloneBFGF,na.rm=TRUE),2),
+             round(min(thedata$EMAaloneBFGF,na.rm=TRUE),2),round(max(thedata$EMAaloneBFGF,na.rm=TRUE),2),sep = ","))
+### Females
+print(paste(length(na.omit(thedata_female$EMAaloneBFGF)),round(mean(thedata_female$EMAaloneBFGF,na.rm=TRUE),2),
+             round(sd(thedata_female$EMAaloneBFGF,na.rm=TRUE),3),round(median(thedata_female$EMAaloneBFGF,na.rm=TRUE),2),
+             round(min(thedata_female$EMAaloneBFGF,na.rm=TRUE),2),round(max(thedata_female$EMAaloneBFGF,na.rm=TRUE),2),sep = ","))
+
+### Males
+print(paste(length(na.omit(thedata_male$EMAaloneBFGF)),round(mean(thedata_male$EMAaloneBFGF,na.rm=TRUE),2),
+             round(sd(thedata_male$EMAaloneBFGF,na.rm=TRUE),3),round(median(thedata_male$EMAaloneBFGF,na.rm=TRUE),2),
+             round(min(thedata_male$EMAaloneBFGF,na.rm=TRUE),2),round(max(thedata_male$EMAaloneBFGF,na.rm=TRUE),2),sep = ","))
+
+## Dating Conflict
+print(paste(length(na.omit(thedata$DatingConflictMean)),round(mean(thedata$DatingConflictMean,na.rm=TRUE),2),
+             round(sd(thedata$DatingConflictMean,na.rm=TRUE),3),round(median(thedata$DatingConflictMean,na.rm=TRUE),2),
+             round(min(thedata$DatingConflictMean,na.rm=TRUE),2),round(max(thedata$DatingConflictMean,na.rm=TRUE),2),sep = ","))
+### Females
+print(paste(length(na.omit(thedata_female$DatingConflictMean)),round(mean(thedata_female$DatingConflictMean,na.rm=TRUE),2),
+             round(sd(thedata_female$DatingConflictMean,na.rm=TRUE),3),round(median(thedata_female$DatingConflictMean,na.rm=TRUE),2),
+             round(min(thedata_female$DatingConflictMean,na.rm=TRUE),2),round(max(thedata_female$DatingConflictMean,na.rm=TRUE),2),sep = ","))
+
+### Males
+print(paste(length(na.omit(thedata_male$DatingConflictMean)),round(mean(thedata_male$DatingConflictMean,na.rm=TRUE),2),
+             round(sd(thedata_male$DatingConflictMean,na.rm=TRUE),3),round(median(thedata_male$DatingConflictMean,na.rm=TRUE),2),
+             round(min(thedata_male$DatingConflictMean,na.rm=TRUE),2),round(max(thedata_male$DatingConflictMean,na.rm=TRUE),2),sep = ","))
+
+## Dating Conflict Threat subscale
+print(paste(length(na.omit(thedata$threatening_mean)),round(mean(thedata$threatening_mean,na.rm=TRUE),2),
+             round(sd(thedata$threatening_mean,na.rm=TRUE),3),round(median(thedata$threatening_mean,na.rm=TRUE),2),
+             round(min(thedata$threatening_mean,na.rm=TRUE),2),round(max(thedata$threatening_mean,na.rm=TRUE),2),sep = ","))
+### Females
+print(paste(length(na.omit(thedata_female$threatening_mean)),round(mean(thedata_female$threatening_mean,na.rm=TRUE),2),
+             round(sd(thedata_female$threatening_mean,na.rm=TRUE),3),round(median(thedata_female$threatening_mean,na.rm=TRUE),2),
+             round(min(thedata_female$threatening_mean,na.rm=TRUE),2),round(max(thedata_female$threatening_mean,na.rm=TRUE),2),sep = ","))
+
+### Males
+print(paste(length(na.omit(thedata_male$threatening_mean)),round(mean(thedata_male$threatening_mean,na.rm=TRUE),2),
+             round(sd(thedata_male$threatening_mean,na.rm=TRUE),3),round(median(thedata_male$threatening_mean,na.rm=TRUE),2),
+             round(min(thedata_male$threatening_mean,na.rm=TRUE),2),round(max(thedata_male$threatening_mean,na.rm=TRUE),2),sep = ","))
+
+
+## Dating Conflict Verbal subscale
+print(paste(length(na.omit(thedata$verbal_mean)),round(mean(thedata$verbal_mean,na.rm=TRUE),2),
+             round(sd(thedata$verbal_mean,na.rm=TRUE),3),round(median(thedata$verbal_mean,na.rm=TRUE),2),
+             round(min(thedata$verbal_mean,na.rm=TRUE),2),round(max(thedata$verbal_mean,na.rm=TRUE),2),sep = ","))
+### Females
+print(paste(length(na.omit(thedata_female$verbal_mean)),round(mean(thedata_female$verbal_mean,na.rm=TRUE),2),
+             round(sd(thedata_female$verbal_mean,na.rm=TRUE),3),round(median(thedata_female$verbal_mean,na.rm=TRUE),2),
+             round(min(thedata_female$verbal_mean,na.rm=TRUE),2),round(max(thedata_female$verbal_mean,na.rm=TRUE),2),sep = ","))
+
+### Males
+print(paste(length(na.omit(thedata_male$verbal_mean)),round(mean(thedata_male$verbal_mean,na.rm=TRUE),2),
+             round(sd(thedata_male$verbal_mean,na.rm=TRUE),3),round(median(thedata_male$verbal_mean,na.rm=TRUE),2),
+             round(min(thedata_male$verbal_mean,na.rm=TRUE),2),round(max(thedata_male$verbal_mean,na.rm=TRUE),2),sep = ","))
+
+
+## Willingness to engage in risky sex
+print(paste(length(na.omit(thedata$WillingRiskySexMean)),round(mean(thedata$WillingRiskySexMean,na.rm=TRUE),2),
+             round(sd(thedata$WillingRiskySexMean,na.rm=TRUE),3),round(median(thedata$WillingRiskySexMean,na.rm=TRUE),2),
+             round(min(thedata$WillingRiskySexMean,na.rm=TRUE),2),round(max(thedata$WillingRiskySexMean,na.rm=TRUE),2),sep = ","))
+
+### Females
+print(paste(length(na.omit(thedata_female$WillingRiskySexMean)),round(mean(thedata_female$WillingRiskySexMean,na.rm=TRUE),2),
+             round(sd(thedata_female$WillingRiskySexMean,na.rm=TRUE),3),round(median(thedata_female$WillingRiskySexMean,na.rm=TRUE),2),
+             round(min(thedata_female$WillingRiskySexMean,na.rm=TRUE),2),round(max(thedata_female$WillingRiskySexMean,na.rm=TRUE),2),sep = ","))
+
+### Males
+print(paste(length(na.omit(thedata_male$WillingRiskySexMean)),round(mean(thedata_male$WillingRiskySexMean,na.rm=TRUE),2),
+             round(sd(thedata_male$WillingRiskySexMean,na.rm=TRUE),3),round(median(thedata_male$WillingRiskySexMean,na.rm=TRUE),2),
+             round(min(thedata_male$WillingRiskySexMean,na.rm=TRUE),2),round(max(thedata_male$WillingRiskySexMean,na.rm=TRUE),2),sep = ","))
+
+
+## Intention to engage in risky sex
+print(paste(length(na.omit(thedata$IntentionRiskSexTotal)),round(mean(thedata$IntentionRiskSexTotal,na.rm=TRUE),2),
+             round(sd(thedata$IntentionRiskSexTotal,na.rm=TRUE),3),round(median(thedata$IntentionRiskSexTotal,na.rm=TRUE),2),
+             round(min(thedata$IntentionRiskSexTotal,na.rm=TRUE),2),round(max(thedata$IntentionRiskSexTotal,na.rm=TRUE),2),sep = ","))
+
+### Females
+print(paste(length(na.omit(thedata_female$IntentionRiskSexTotal)),round(mean(thedata_female$IntentionRiskSexTotal,na.rm=TRUE),2),
+             round(sd(thedata_female$IntentionRiskSexTotal,na.rm=TRUE),3),round(median(thedata_female$IntentionRiskSexTotal,na.rm=TRUE),2),
+             round(min(thedata_female$IntentionRiskSexTotal,na.rm=TRUE),2),round(max(thedata_female$IntentionRiskSexTotal,na.rm=TRUE),2),sep = ","))
+
+### Males
+print(paste(length(na.omit(thedata_male$IntentionRiskSexTotal)),round(mean(thedata_male$IntentionRiskSexTotal,na.rm=TRUE),2),
+             round(sd(thedata_male$IntentionRiskSexTotal,na.rm=TRUE),3),round(median(thedata_male$IntentionRiskSexTotal,na.rm=TRUE),2),
+             round(min(thedata_male$IntentionRiskSexTotal,na.rm=TRUE),2),round(max(thedata_male$IntentionRiskSexTotal,na.rm=TRUE),2),sep = ","))
 
 ```
 
-Analyses set up
+Analysis
 ```{r, message=FALSE, warning=FALSE, include=FALSE}
 
 # Question 1:
@@ -507,17 +604,21 @@ Analyses set up
 # DVs:  a) Opportunities monitoring score in Grade 9
 #       b) Having an older partner in Grade 9
 #       c) EMA time unsupervised w/ partner in Grade 9 + summer
-
+options(scipen=999) 
 
 # Does gender relate to opportunities monitoring score?
 gender_oppmon<-lm(OppMonitorMean ~ Gender, data=thedata, na.action=na.omit)
-anova(gender_oppmon)  # F(1,309)=7.1982 p=0.008
+anova(gender_oppmon)  # yes
 summary(gender_oppmon) # Males less likely to have opportunities to be unmonitored.
+print(paste0("Adj R Square = ",round(summary(gender_oppmon)$adj.r.squared,3),
+      " p-value = ",round(anova(gender_oppmon)$'Pr(>F)'[1],4)))
 
 # Does gender relate to the age of one's oldest romantic partner in grade 9?
 gender_ageoldpartner<-lm(oldest ~ Gender, data=thedata, na.action=na.omit)
 anova(gender_ageoldpartner) # yes
-summary(gender_ageoldpartner)
+summary(gender_ageoldpartner) # Males less like to have dated older partner
+print(paste0("Adj R Square = ",round(summary(gender_ageoldpartner)$adj.r.squared,3),
+      " p-value = ",round(anova(gender_ageoldpartner)$'Pr(>F)'[1],5)))
 
 # Does gender relate to EMA time unsupervised w/ partner in grade 9 + summer
 gender_ema<-lm(EMAaloneBFGF ~ Gender, data=thedata, na.action=na.omit)
@@ -533,6 +634,9 @@ summary(ethnicity_oppmon)
 ethnicity_ageoldpartner<-lm(oldest ~ Ethnicity, data=thedata, na.action=na.omit)
 anova(ethnicity_ageoldpartner) # yes
 summary(ethnicity_ageoldpartner)
+print(paste0("Adj R Square = ",round(summary(ethnicity_ageoldpartner)$adj.r.squared,3),
+      " p-value = ",round(anova(ethnicity_ageoldpartner)$'Pr(>F)'[1],5)))
+
 
 # Does ethnicity relate to EMA time unsupervised w/ partner in grade 9 + summer
 ethnicity_ema<-lm(EMAaloneBFGF ~ Ethnicity, data=thedata, na.action=na.omit)
@@ -544,9 +648,24 @@ gender_ethnicity_ageoldpartner<-lm(oldest ~ Gender* Ethnicity, data=thedata, na.
 anova(gender_ethnicity_ageoldpartner) # yes
 summary(gender_ethnicity_ageoldpartner)
 
+gender_ethnicity_ageoldpartner_graph<-ggplot(thedata %>% filter(!is.na(Ethnicity)) %>% filter(!is.na(oldest)),
+                                             aes(x=as.factor(Gender), fill=as.factor(oldest))) +
+  geom_bar() +
+  facet_grid(.~as.factor(Ethnicity),
+             scales='free',
+              labeller=as_labeller(latino_labels))+
+  labs(x="Gender",fill="Oldest romantic partner") + 
+  scale_fill_discrete(labels=c("0" = "At least a year younger", "1" = "About same age", "2" = "At least a year older", "3" = "18 years or older")) +
+  scale_x_discrete(labels=c("0" = "Female", "1" = "Male"))+
+  theme_kate() + theme(legend.position="right")
+gender_ethnicity_ageoldpartner_graph
+
+
 # Does pubertal status at grade 8 relate to opportunities monitoring score?
 puberty_oppmon<-lm(OppMonitorMean ~ Puberty_3group, data=thedata, na.action=na.omit)
 anova(puberty_oppmon) # no
+
+# What about just the females when divided into late vs. early/typical pubertal timing?
 puberty_oppmon<-lm(OppMonitorMean ~ Puberty_2group, data=thedata %>% filter(Gender=="Female"), na.action=na.omit)
 anova(puberty_oppmon) # no
 
@@ -558,6 +677,8 @@ anova(gender_puberty_oppmon) # No
 puberty_ageoldpartner<-lm(oldest ~ Puberty_2group, data=thedata, na.action=na.omit)
 anova(puberty_ageoldpartner) # yes
 summary(puberty_ageoldpartner)
+print(paste0("Adj R Square = ",round(summary(puberty_ageoldpartner)$adj.r.squared,3),
+      " p-value = ",round(anova(puberty_ageoldpartner)$'Pr(>F)'[1],5)))
 
 # Does pubertal status at grade 8 relate to EMA time unsupervised w/ partner in grade 9 + summer
 puberty_ema<-lm(EMAaloneBFGF ~ Puberty_2group, data=thedata, na.action=na.omit)
@@ -573,14 +694,21 @@ summary(puberty_gender_ethnicity_ageoldpartner)
 oppmon_EMAaloneBFGF<-lm(EMAaloneBFGF ~ OppMonitorMean, data=thedata, na.action=na.omit)
 anova(oppmon_EMAaloneBFGF) # yes
 summary(oppmon_EMAaloneBFGF)
+print(paste0("Adj R Square = ",round(summary(oppmon_EMAaloneBFGF)$adj.r.squared,3),
+      " p-value = ",round(anova(oppmon_EMAaloneBFGF)$'Pr(>F)'[1],15)))
+
 
 ageoldpartner_oppmon<-lm(OppMonitorMean ~ oldest, data=thedata, na.action=na.omit)
 anova(ageoldpartner_oppmon) # yes
 summary(ageoldpartner_oppmon)
+print(paste0("Adj R Square = ",round(summary(ageoldpartner_oppmon)$adj.r.squared,3),
+      " p-value = ",round(anova(ageoldpartner_oppmon)$'Pr(>F)'[1],5)))
 
 ageoldpartner_EMAaloneBFGF<-lm(EMAaloneBFGF ~ oldest, data=thedata, na.action=na.omit)
-anova(ageoldpartner_EMAaloneBFGF) #yes
+anova(ageoldpartner_EMAaloneBFGF) #yes but p = .04 so questionable.
 summary(ageoldpartner_EMAaloneBFGF)
+print(paste0("Adj R Square = ",round(summary(ageoldpartner_EMAaloneBFGF)$adj.r.squared,3),
+      " p-value = ",round(anova(ageoldpartner_EMAaloneBFGF)$'Pr(>F)'[1],5)))
 
 
 ###########################################
@@ -594,8 +722,6 @@ summary(ageoldpartner_EMAaloneBFGF)
 #       f) Age of BF/GF Grade 10
 # DVs:  a) Conflict dating behavior Grade 10
 
-# Analysis 2a:
-
 # Does gender relate to conflict dating behavior Grade 10?
 gender_conflict<-lm(DatingConflictMean ~ Gender, data=thedata, na.action=na.omit)
 anova(gender_conflict) # No
@@ -608,45 +734,293 @@ anova(ethnicity_conflict) # No
 puberty_conflict<-lm(DatingConflictMean ~ Puberty_2group, data=thedata, na.action=na.omit)
 anova(puberty_conflict) # No
 
+# What about girls only?
+puberty_conflict<-lm(DatingConflictMean ~ Puberty_2group, data=thedata %>% filter(Gender=="Female"), na.action=na.omit)
+anova(puberty_conflict) # No
+
 # Does having had an older romantic partner by grade 9 relate to conflict dating behavior Grade 10?
-oldest_conflict<-lm(DatingConflictMean ~ oldest*EMAaloneBFGF, data=thedata, na.action=na.omit)
+oldest_conflict<-lm(DatingConflictMean ~ oldest, data=thedata, na.action=na.omit)
 anova(oldest_conflict) # No
+
+# Is there an interaction wtih gender?
+oldest_gender_conflict<-lm(DatingConflictMean ~ oldest*Gender, data=thedata, na.action=na.omit)
+anova(oldest_gender_conflict) # No
+# Is there an interaction wtih ethnicity?
+oldest_ethnicity_conflict<-lm(DatingConflictMean ~ oldest*Ethnicity, data=thedata, na.action=na.omit)
+anova(oldest_ethnicity_conflict) # No
+# Is there an interaction wtih puberty?
+oldest_puberty_conflict<-lm(DatingConflictMean ~ oldest*Puberty_2group, data=thedata, na.action=na.omit)
+anova(oldest_puberty_conflict) # No
 
 # Does having opportunties to engage in risky sexual activity relate to conflict dating behavior Grade 10?
 oppmon_conflict<-lm(DatingConflictMean ~ OppMonitorMean, data=thedata, na.action=na.omit)
 anova(oppmon_conflict) # yes
 summary(oppmon_conflict) 
+print(paste0("Adj R Square = ",round(summary(oppmon_conflict)$adj.r.squared,3),
+      " p-value = ",round(anova(oppmon_conflict)$'Pr(>F)'[1],9)))
+
+# Is there an interaction wtih gender?
+oppmon_gender_conflict<-lm(DatingConflictMean ~ OppMonitorMean*Gender, data=thedata, na.action=na.omit)
+anova(oppmon_gender_conflict) # Yes
+print(paste0("Adj R Square = ",round(summary(oppmon_gender_conflict)$adj.r.squared,3),
+      " p-value = ",round(anova(oppmon_gender_conflict)$'Pr(>F)'[1],9)))
+
+
+oppmon_gender_conflict_graph<-ggplot(thedata %>% filter(!is.na(DatingConflictMean)),
+                                             aes(x=OppMonitorMean, y=DatingConflictMean, 
+                                                 colour=Gender)) +
+geom_point(aes(colour=Gender),alpha=.3)+
+  geom_smooth(method=lm,
+                aes(x=OppMonitorMean, y=DatingConflictMean, colour=Gender),
+                size=.7,
+                alpha=0.2)+
+  labs(x="Opportunity Monitor Mean Score",
+       y="CADRI mean score",colour="Gender")+
+  theme_kate() + theme(legend.position="right")
+oppmon_gender_conflict_graph
+
+# Is there an interaction wtih ethnicity?
+oppmon_ethnicity_conflict<-lm(DatingConflictMean ~ OppMonitorMean*Ethnicity, data=thedata, na.action=na.omit)
+anova(oppmon_ethnicity_conflict) # Yes
+print(paste0("Adj R Square = ",round(summary(oppmon_ethnicity_conflict)$adj.r.squared,3),
+      " p-value = ",round(anova(oppmon_ethnicity_conflict)$'Pr(>F)'[1],9)))
+
+
+oppmon_ethnicity_conflict_graph<-ggplot(thedata %>% filter(!is.na(DatingConflictMean)) %>% filter(!is.na(Ethnicity)),
+                                             aes(x=OppMonitorMean, y=DatingConflictMean, 
+                                                 colour=as.factor(Ethnicity))) +
+geom_point(aes(colour=as.factor(Ethnicity)),alpha=.3)+
+  geom_smooth(method=lm,
+                aes(x=OppMonitorMean, y=DatingConflictMean, colour=as.factor(Ethnicity)),
+                size=.7,
+                alpha=0.2)+
+  labs(x="Opportunity Monitor Mean Score",
+       y="CADRI mean score",colour="Ethnicity")+
+  scale_colour_discrete(labels=latino_labels)+
+  theme_kate() + theme(legend.position="right")
+oppmon_ethnicity_conflict_graph
+
+# Is there an interaction wtih puberty?
+oppmon_puberty_conflict<-lm(DatingConflictMean ~ OppMonitorMean*Puberty_2group, data=thedata, na.action=na.omit)
+anova(oppmon_puberty_conflict) # No
+
+# Is there a three way interaction with Gender and Ethnicity?
+oppmon_gender_ethnicity_conflict<-lm(DatingConflictMean ~ OppMonitorMean*Gender*Ethnicity, data=thedata, na.action=na.omit)
+anova(oppmon_gender_ethnicity_conflict) # No
 
 # Does having opportunties to engage in risky sexual activity (EMA) relate to conflict dating behavior Grade 10?
 ema_conflict<-lm(DatingConflictMean ~ EMAaloneBFGF, data=thedata, na.action=na.omit)
 anova(ema_conflict) #no
 
+# Is there an interaction with gender?
+ema_gender_conflict<-lm(DatingConflictMean ~ EMAaloneBFGF*Gender, data=thedata, na.action=na.omit)
+anova(ema_gender_conflict) #no
+# Is there an interaction with ethnicity?
+ema_ethnic_conflict<-lm(DatingConflictMean ~ EMAaloneBFGF*Ethnicity, data=thedata, na.action=na.omit)
+anova(ema_ethnic_conflict) #no
+# Is there an interaction with puberty?
+ema_puberty_conflict<-lm(DatingConflictMean ~ EMAaloneBFGF*Puberty_2group, data=thedata, na.action=na.omit)
+anova(ema_puberty_conflict) #no
+
 # Do our measures of opportunities to engage in risky sexual activity interact to relate to conflict dating behavior Grade 10?
-oppmon_ema_conflict<-lm(DatingConflictMean ~ OppMonitorMean+EMAaloneBFGF, data=thedata, na.action=na.omit)
+oppmon_ema_conflict<-lm(DatingConflictMean ~ OppMonitorMean*EMAaloneBFGF, data=thedata, na.action=na.omit)
 anova(oppmon_ema_conflict) # no
 summary(oppmon_ema_conflict)
+
+
+
+###########################################
+# Question 3:
+# What predicts willingness to engage in risky sex?
+# IVs:  a) Gender
+#       b) Ethnicity
+#       c) Pubertal Status at Grade 8
+#       d) EMA time unsupervised w/ partner at Grade 9 + summer
+#       e) Opportunities monitoring score at Grade 9
+#       f) Age of BF/GF Grade 10
+# DVs:  a) Willingness to engage in risky sex Grade 10
+
+# Does gender relate to willingness to engage in risky sex Grade 10?
+gender_willing<-lm(WillingRiskySexMean ~ Gender, data=thedata, na.action=na.omit)
+anova(gender_willing) # Yes
+summary(gender_willing) # Males more willing
+print(paste0("Adj R Square = ",round(summary(gender_willing)$adj.r.squared,3),
+      " p-value = ",round(anova(gender_willing)$'Pr(>F)'[1],9)))
+
+# Does ethnicity relate to willingness to engage in risky sex Grade 10?
+ethnicity_willing<-lm(WillingRiskySexMean ~ Ethnicity, data=thedata, na.action=na.omit)
+anova(ethnicity_willing) # Yes
+summary(ethnicity_willing) # Latinos more willing
+print(paste0("Adj R Square = ",round(summary(ethnicity_willing)$adj.r.squared,3),
+      " p-value = ",round(anova(ethnicity_willing)$'Pr(>F)'[1],9)))
+
+# Does pubertal status at grade 8 relate to willingness to engage in risky sex Grade 10?
+puberty_willing<-lm(WillingRiskySexMean ~ Puberty_2group, data=thedata, na.action=na.omit)
+anova(puberty_willing) # No
+
+# Does having had an older romantic partner by grade 9 relate to willingness to engage in risky sex Grade 10?
+oldest_willing<-lm(WillingRiskySexMean ~ oldest, data=thedata, na.action=na.omit)
+anova(oldest_willing) # No
+
+# Is there an interaction wtih gender?
+oldest_gender_willing<-lm(WillingRiskySexMean ~ oldest*Gender, data=thedata, na.action=na.omit)
+anova(oldest_gender_willing) # No
+# Is there an interaction wtih ethnicity?
+oldest_ethnicity_willing<-lm(WillingRiskySexMean ~ oldest*Ethnicity, data=thedata, na.action=na.omit)
+anova(oldest_ethnicity_willing) # No
+# Is there an interaction wtih puberty?
+oldest_puberty_willing<-lm(WillingRiskySexMean ~ oldest*Puberty_2group, data=thedata, na.action=na.omit)
+anova(oldest_puberty_willing) # No
+
+# Does having opportunties to engage in risky sexual activity relate to willingness to engage in risky sex Grade 10?
+oppmon_willing<-lm(WillingRiskySexMean ~ OppMonitorMean, data=thedata, na.action=na.omit)
+anova(oppmon_willing) # yes
+summary(oppmon_willing) 
+print(paste0("Adj R Square = ",round(summary(oppmon_willing)$adj.r.squared,3),
+      " p-value = ",round(anova(oppmon_willing)$'Pr(>F)'[1],9)))
+
+# Is there an interaction wtih gender?
+oppmon_gender_willing<-lm(WillingRiskySexMean ~ OppMonitorMean*Gender, data=thedata, na.action=na.omit)
+anova(oppmon_gender_willing) # Yes
+print(paste0("Adj R Square = ",round(summary(oppmon_gender_willing)$adj.r.squared,3),
+      " p-value = ",round(anova(oppmon_gender_willing)$'Pr(>F)'[1],9)))
+
+oppmon_gender_willing_graph<-ggplot(thedata %>% filter(!is.na(WillingRiskySexMean)),
+                                             aes(x=OppMonitorMean, y=WillingRiskySexMean, 
+                                                 colour=Gender)) +
+geom_point(aes(colour=Gender),alpha=.3)+
+  geom_smooth(method=lm,
+                aes(x=OppMonitorMean, y=WillingRiskySexMean, colour=Gender),
+                size=.7,
+                alpha=0.2)+
+  labs(x="Opportunity Monitor Mean Score",
+       y="Willingness to engage in risky sex",colour="Gender")+
+  theme_kate() + theme(legend.position="right")
+oppmon_gender_willing_graph
+
+# Is there an interaction wtih ethnicity?
+oppmon_ethnicity_willing<-lm(WillingRiskySexMean ~ OppMonitorMean*Ethnicity, data=thedata, na.action=na.omit)
+anova(oppmon_ethnicity_willing) # No
+
+# Is there an interaction wtih puberty?
+oppmon_puberty_willing<-lm(WillingRiskySexMean ~ OppMonitorMean*Puberty_2group, data=thedata, na.action=na.omit)
+anova(oppmon_puberty_willing) # No
+
+# Does having opportunties to engage in risky sexual activity (EMA) relate to willingness to engage in risky sex Grade 10?
+ema_willing<-lm(WillingRiskySexMean ~ EMAaloneBFGF, data=thedata, na.action=na.omit)
+anova(ema_willing) # Yes
+print(paste0("Adj R Square = ",round(summary(ema_willing)$adj.r.squared,3),
+      " p-value = ",round(anova(ema_willing)$'Pr(>F)'[1],9)))
+
+
+# Is there an interaction with gender?
+ema_gender_willing<-lm(WillingRiskySexMean ~ EMAaloneBFGF*Gender, data=thedata, na.action=na.omit)
+anova(ema_gender_willing) #no
+# Is there an interaction with ethnicity?
+ema_ethnic_willing<-lm(WillingRiskySexMean ~ EMAaloneBFGF*Ethnicity, data=thedata, na.action=na.omit)
+anova(ema_ethnic_willing) #no
+# Is there an interaction with puberty?
+ema_puberty_willing<-lm(WillingRiskySexMean ~ EMAaloneBFGF*Puberty_2group, data=thedata, na.action=na.omit)
+anova(ema_puberty_willing) #no
+
+# Do our measures of opportunities to engage in risky sexual activity interact to relate to willingness to engage in risky sex Grade 10?
+oppmon_ema_willing<-lm(WillingRiskySexMean ~ OppMonitorMean*EMAaloneBFGF, data=thedata, na.action=na.omit)
+anova(oppmon_ema_willing) # no
+summary(oppmon_ema_willing)
+
+
+
+###########################################
+# Question 4:
+# What predicts intention to engage in risky sex?
+# IVs:  a) Gender
+#       b) Ethnicity
+#       c) Pubertal Status at Grade 8
+#       d) EMA time unsupervised w/ partner at Grade 9 + summer
+#       e) Opportunities monitoring score at Grade 9
+#       f) Age of BF/GF Grade 10
+# DVs:  a) Intention to engage in risky sex Grade 10
+
+# Does gender relate to willingness to engage in risky sex Grade 10?
+gender_intention<-lm(IntentionRiskSexTotal ~ Gender, data=thedata, na.action=na.omit)
+anova(gender_intention) # Yes
+summary(gender_intention) # Males more intention
+print(paste0("Adj R Square = ",round(summary(gender_intention)$adj.r.squared,3),
+      " p-value = ",round(anova(gender_intention)$'Pr(>F)'[1],9)))
+
+# Does ethnicity relate to intentionness to engage in risky sex Grade 10?
+ethnicity_intention<-lm(IntentionRiskSexTotal ~ Ethnicity, data=thedata, na.action=na.omit)
+anova(ethnicity_intention) # No
+
+# Does pubertal status at grade 8 relate to intentionness to engage in risky sex Grade 10?
+puberty_intention<-lm(IntentionRiskSexTotal ~ Puberty_2group, data=thedata, na.action=na.omit)
+anova(puberty_intention) # No
+
+# Does having had an older romantic partner by grade 9 relate to intentionness to engage in risky sex Grade 10?
+oldest_intention<-lm(IntentionRiskSexTotal ~ oldest, data=thedata, na.action=na.omit)
+anova(oldest_intention) # No
+
+# Is there an interaction wtih gender?
+oldest_gender_intention<-lm(IntentionRiskSexTotal ~ oldest*Gender, data=thedata, na.action=na.omit)
+anova(oldest_gender_intention) # No
+# Is there an interaction wtih ethnicity?
+oldest_ethnicity_intention<-lm(IntentionRiskSexTotal ~ oldest*Ethnicity, data=thedata, na.action=na.omit)
+anova(oldest_ethnicity_intention) # Yes but not model significant
+print(paste0("Adj R Square = ",round(summary(oldest_ethnicity_intention)$adj.r.squared,3),
+      " p-value = ",round(anova(oldest_ethnicity_intention)$'Pr(>F)'[1],9)))
+
+# Is there an interaction with puberty?
+oldest_puberty_intention<-lm(IntentionRiskSexTotal ~ oldest*Puberty_2group, data=thedata, na.action=na.omit)
+anova(oldest_puberty_intention) # No
+
+# Does having opportunties to engage in risky sexual activity relate to intentionness to engage in risky sex Grade 10?
+oppmon_intention<-lm(IntentionRiskSexTotal ~ OppMonitorMean, data=thedata, na.action=na.omit)
+anova(oppmon_intention) # yes
+summary(oppmon_intention) 
+print(paste0("Adj R Square = ",round(summary(oppmon_intention)$adj.r.squared,3),
+      " p-value = ",round(anova(oppmon_intention)$'Pr(>F)'[1],9)))
+
+# Is there an interaction wtih gender?
+oppmon_gender_intention<-lm(IntentionRiskSexTotal ~ OppMonitorMean*Gender, data=thedata, na.action=na.omit)
+anova(oppmon_gender_intention) # No
+print(paste0("Adj R Square = ",round(summary(oppmon_gender_intention)$adj.r.squared,3),
+      " p-value = ",round(anova(oppmon_gender_intention)$'Pr(>F)'[1],9)))
+
+# Is there an interaction wtih ethnicity?
+oppmon_ethnicity_intention<-lm(IntentionRiskSexTotal ~ OppMonitorMean*Ethnicity, data=thedata, na.action=na.omit)
+anova(oppmon_ethnicity_intention) # No
+
+# Is there an interaction wtih puberty?
+oppmon_puberty_intention<-lm(IntentionRiskSexTotal ~ OppMonitorMean*Puberty_2group, data=thedata, na.action=na.omit)
+anova(oppmon_puberty_intention) # No
+
+# Does having opportunties to engage in risky sexual activity (EMA) relate to intentionness to engage in risky sex Grade 10?
+ema_intention<-lm(IntentionRiskSexTotal ~ EMAaloneBFGF, data=thedata, na.action=na.omit)
+anova(ema_intention) # Yes
+print(paste0("Adj R Square = ",round(summary(ema_intention)$adj.r.squared,3),
+      " p-value = ",round(anova(ema_intention)$'Pr(>F)'[1],9)))
+
+
+# Is there an interaction with gender?
+ema_gender_intention<-lm(IntentionRiskSexTotal ~ EMAaloneBFGF*Gender, data=thedata, na.action=na.omit)
+anova(ema_gender_intention) #no
+# Is there an interaction with ethnicity?
+ema_ethnic_intention<-lm(IntentionRiskSexTotal ~ EMAaloneBFGF*Ethnicity, data=thedata, na.action=na.omit)
+anova(ema_ethnic_intention) #no
+# Is there an interaction with puberty?
+ema_puberty_intention<-lm(IntentionRiskSexTotal ~ EMAaloneBFGF*Puberty_2group, data=thedata, na.action=na.omit)
+anova(ema_puberty_intention) #no
+
+# Do our measures of opportunities to engage in risky sexual activity interact to relate to intentionness to engage in risky sex Grade 10?
+oppmon_ema_intention<-lm(IntentionRiskSexTotal ~ OppMonitorMean*EMAaloneBFGF, data=thedata, na.action=na.omit)
+anova(oppmon_ema_intention) # no
+summary(oppmon_ema_intention)
+
 
 ```
 
 Plot results
 ```{r, message=FALSE, warning=FALSE}
-## Correlate Puberty Mean by Opportunity Monitor Mean
-ggplot(thedata,aes(y=OppMonitorMean,
-                   x=Puberty)) +
-  geom_point(color='maroon4',alpha=.3)+
-  geom_smooth(method=lm,
-                aes(y=OppMonitorMean,
-                   x=Puberty),
-                size=.7,
-                alpha=0.2,
-                colour="maroon1",
-                fill = "maroon1")+
-  labs(x='Puberty Grade 8',
-       y='Dating Conflict Mean Grade 10') +
-  theme_kate()
-
-
-
 ## Correlate Opportunity Monitor Mean by Dating Conflict Mean
 ggplot(thedata,aes(x=OppMonitorMean,
                    y=DatingConflictMean)) +
