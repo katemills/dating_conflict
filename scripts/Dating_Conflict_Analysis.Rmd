@@ -20,8 +20,8 @@ knitr::opts_chunk$set(
 	warning = FALSE,
 	include = FALSE
 )
-packages <- c( "tidyverse", "nlme", "lme4", "RODBC", "data.table",
-               "ggplot2")
+packages <- c( "tidyverse", "RODBC", "data.table",
+               "ggplot2","lavaan","semPlot")
 if (length(setdiff(packages, rownames(installed.packages()))) > 0) {
   install.packages(setdiff(packages, rownames(installed.packages())))
 }
@@ -592,7 +592,7 @@ print(paste(length(na.omit(thedata_male$IntentionRiskSexTotal)),round(mean(theda
 
 ```
 
-Analysis
+Linear Regression Analysis
 ```{r, message=FALSE, warning=FALSE, include=FALSE}
 
 # Question 1:
@@ -1019,102 +1019,161 @@ summary(oppmon_ema_intention)
 
 ```
 
-Plot results
-```{r, message=FALSE, warning=FALSE}
-## Correlate Opportunity Monitor Mean by Dating Conflict Mean
-ggplot(thedata,aes(x=OppMonitorMean,
-                   y=DatingConflictMean)) +
-  geom_point(color='maroon4',alpha=.3)+
-  geom_smooth(method=lm,
-                aes(x=OppMonitorMean,
-                    y=DatingConflictMean),
-                size=.7,
-                alpha=0.2,
-                colour="maroon1",
-                fill = "maroon1")+
-  labs(x='Opportunity Monitor Mean Grade 9',
-       y='Dating Conflict Mean Grade 10') +
-  theme_kate()
+Path Analysis
+```{r, message=FALSE, warning=FALSE, include=FALSE}
+
+# Dummy code a few variables
+dummydata<-thedata %>%
+  mutate(Gender=ifelse(Gender=="Female",0,
+                       ifelse(Gender=="Male",1,NA))) %>%
+  mutate(Puberty_2group=ifelse(Puberty_2group=="less",0,
+                               ifelse(Puberty_2group=="avg",1,NA))) %>%
+  mutate(Ethnicity=as.numeric(as.character(Ethnicity))) %>%
+           select(-Puberty_3group)
+
+
+# Create the correlation matrix
+corrmatrix<-cor(dummydata,use = "pairwise.complete.obs")
+rownames(corrmatrix)<-colnames(corrmatrix)<-colnames(dummydata)
+
+
+
+# Model 1: Original conceptual model
+# Specify the model
+DatingConflictModel<-'
+OppMonitorMean~Gender+Puberty_2group+Ethnicity
+oldest~Gender+Puberty_2group+Ethnicity
+EMAaloneBFGF~Gender+Puberty_2group+Ethnicity
+DatingConflictMean~Gender
+DatingConflictMean~Puberty_2group
+DatingConflictMean~Ethnicity
+DatingConflictMean~OppMonitorMean
+DatingConflictMean~oldest
+DatingConflictMean~EMAaloneBFGF
+'
+# Estimate the model
+results<-sem(DatingConflictModel,sample.cov=corrmatrix,sample.nobs=394)
+
+# Display results
+summary(results,standardized=T,fit.measures=T,rsq=T)
+
+# Plot results
+output<-semPaths(results,'std',layout='tree')
+
+# Create labels
+lbls<-c("Opportunities\nMonitoring",
+        "Oldest\nPartner",
+        "EMA Alone\nw/ Partner",
+        "CADRI\nScore",
+        "Gender","Puberty","Latino")
+
+# Define the groups
+grps<-list(covariates=c("Gender","Puberty_2group","Ethnicity"),
+           riskfactors=c("OppMonitorMean","oldest","EMAaloneBFGF"),
+           outcome=c("DatingConflictMean"))
+
+#new plot
+semPaths(results,what="std",
+                  layout="tree",
+                  residuals=FALSE,
+                  nCharNodes=0,
+                  groups=grps,
+                  color=c("dodgerblue","violetred3","chartreuse4"),
+                  posCol=c("blue","red"),
+                  nodeLabels=lbls,
+                  sizeMan=8,
+                  edge.label.cex=1.0,
+                  legend=FALSE,
+                  filetype="png",
+                  filename="../graphs/SEM_model1",
+                  height = 5, width = 10)
+
+
+# Model 2: Remove "oldest" from the model
+# Specify the model
+DatingConflictModel2<-'
+OppMonitorMean~Gender+Puberty_2group+Ethnicity
+EMAaloneBFGF~Gender+Puberty_2group+Ethnicity
+DatingConflictMean~Gender
+DatingConflictMean~Puberty_2group
+DatingConflictMean~Ethnicity
+DatingConflictMean~OppMonitorMean
+DatingConflictMean~EMAaloneBFGF
+'
+# Estimate the model
+results2<-sem(DatingConflictModel2,sample.cov=corrmatrix,sample.nobs=394)
+
+# Display results
+summary(results2,standardized=T,fit.measures=T,rsq=T)
+
+# Plot results
+output2<-semPaths(results2,'std',layout='tree')
+
+# Create labels
+lbls2<-c("Opportunities\nMonitoring",
+        "EMA Alone\nw/ Partner",
+        "CADRI\nScore",
+        "Gender","Puberty","Latino")
+
+# Define the groups
+grps2<-list(covariates=c("Gender","Puberty_2group","Ethnicity"),
+           riskfactors=c("OppMonitorMean","EMAaloneBFGF"),
+           outcome=c("DatingConflictMean"))
+
+#new plot
+semPaths(results2,what="std",
+                  layout="tree",
+                  residuals=FALSE,
+                  nCharNodes=0,
+                  groups=grps2,
+                  color=c("dodgerblue","violetred3","chartreuse4"),
+                  posCol=c("blue","red"),
+                  nodeLabels=lbls2,
+                  sizeMan=8,
+                  edge.label.cex=1.0,
+                  legend=FALSE,
+                  filetype="png",
+                  filename="../graphs/SEM_model2",
+                  height = 5, width = 10)
+
+# Model 3: Kate trying to figure out a parsimonious model that is a good fit
+# Specify the model
+DatingConflictModel3<-'
+OppMonitorMean~Gender+Puberty_2group+Ethnicity
+DatingConflictMean~Gender+Ethnicity+OppMonitorMean
+'
+# Estimate the model
+results3<-sem(DatingConflictModel3,sample.cov=corrmatrix,sample.nobs=394)
+
+# Display results
+summary(results3,standardized=T,fit.measures=T,rsq=T)
+
+# Create labels
+lbls3<-c("Opportunities\nMonitoring",
+        "CADRI\nScore",
+        "Gender","Puberty","Latino")
+
+# Define the groups
+grps3<-list(covariates=c("Gender","Puberty_2group","Ethnicity"),
+           riskfactors=c("OppMonitorMean"),
+           outcome=c("DatingConflictMean"))
+
+#new plot
+semPaths(results3,what="std",
+                  layout="tree",
+                  residuals=FALSE,
+                  nCharNodes=0,
+                  groups=grps3,
+                  color=c("dodgerblue","violetred3","chartreuse4"),
+                  posCol=c("blue","red"),
+                  nodeLabels=lbls3,
+                  sizeMan=8,
+                  edge.label.cex=1.0,
+                  legend=FALSE,
+                  filetype="png",
+                  filename="../graphs/SEM_model3",
+                  height = 5, width = 10)
+
+
 
 ```
-
-Side project for Julie: correlations between different parental monitoring assessments
-```{r}
-conn <- RODBC::odbcConnect(dsn="PInf1")
-child_survey <- data.table(RODBC::sqlQuery(conn,"SELECT * From PInf1.dbo.SWave"))
-rm(conn)
-EMA_waves3456<-read.csv("../../EMA_Wave3456.csv",header=TRUE,stringsAsFactors = FALSE)
-
-parent_survey_w1 <-read.csv("/PeerInfluence/Data&Analysis/Data/Qualtrics/PQ/2014/ParentQT1C1.csv",header=TRUE,stringsAsFactors = FALSE) %>%
-  filter(!grepl("_2",pid)) %>%
-  mutate(parentmonitor = round(rowMeans(cbind(as.numeric(p9ms_01),
-                                       as.numeric(p9ms_02),
-                                       as.numeric(p9ms_03),
-                                       as.numeric(p9ms_04),
-                                       as.numeric(p9ms_05),
-                                       as.numeric(p9ms_06),
-                                       as.numeric(p9ms_07)),na.rm = TRUE),3)) %>%
-  select(parentmonitor,pid)%>% 
-  mutate(WID=1,
-         SID=substring(pid,0,nchar(pid)-2))
-
-parent_survey_w5 <-read.csv("/PeerInfluence/Data&Analysis/Data/Qualtrics/PQ/2015/ParentQ2015.csv",header=TRUE,stringsAsFactors = FALSE)  %>%
-  filter(!grepl("_2",pid))%>%
-  mutate(parentmonitor = round(rowMeans(cbind(as.numeric(p9ms_01),
-                                       as.numeric(p9ms_02),
-                                       as.numeric(p9ms_03),
-                                       as.numeric(p9ms_04),
-                                       as.numeric(p9ms_05),
-                                       as.numeric(p9ms_06),
-                                       as.numeric(p9ms_07)),na.rm = TRUE),3)) %>%
-  select(parentmonitor,pid)%>% 
-  mutate(WID=5,
-         SID=substring(pid,0,nchar(pid)-2))
-
-parent_survey_w9 <-read.csv("/PeerInfluence/Data&Analysis/Data/Qualtrics/PQ/2016/TAP_Parent_Q_2016.csv",header=TRUE,stringsAsFactors = FALSE) %>%
-  filter(!grepl("_2",pid)) %>%
-  mutate(parentmonitor = round(rowMeans(cbind(as.numeric(p9ms_01),
-                                       as.numeric(p9ms_02),
-                                       as.numeric(p9ms_03),
-                                       as.numeric(p9ms_04),
-                                       as.numeric(p9ms_05),
-                                       as.numeric(p9ms_06),
-                                       as.numeric(p9ms_07)),na.rm = TRUE),3)) %>%
-  select(parentmonitor,pid)%>% 
-  mutate(WID=9,
-         SID=substring(pid,0,nchar(pid)-2))
-
-parent_survey<-bind_rows(parent_survey_w1,parent_survey_w5,parent_survey_w9) %>%
-  filter(!is.na(parentmonitor))%>%
-  mutate(SID=as.factor(SID))
-
-student_survey<-surveydata %>%
-  filter(WID==c(1,5,9)) %>%
-  mutate(studentmonitor = round(rowMeans(cbind(ParHang, ParWhere, ParAfter, ParAway, ParPlans, ParInterests, Par2Days),na.rm = TRUE),3)) %>% 
-   select(studentmonitor,SID,WID) %>%
-  mutate(SID=as.factor(SID))
-
-surveys<-left_join(parent_survey,student_survey,by=c("SID","WID")) %>%
-  filter(!is.na(studentmonitor))
-
-
-ggplot(surveys, aes(x=parentmonitor,y=studentmonitor,
-                    colour=SID)) +
-  geom_point()+
-  geom_smooth(method=lm,
-                aes(x=parentmonitor,y=studentmonitor),
-                size=.7,
-                alpha=0.2,
-                colour="dodgerblue",
-                fill = "dodgerblue")+
-  facet_grid(.~WID,
-             scales='free')+
-  theme_kate()
-
-
-
-```
-
-
-
-
