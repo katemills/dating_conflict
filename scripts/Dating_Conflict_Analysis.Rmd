@@ -84,20 +84,33 @@ puberty<-left_join(demographics,(surveydata %>%
   mutate(PDS_Female=ifelse(Gender==0,rowMeans(cbind(PubSpurt,PubHair,PubZits,PubBreast,MensesStarted),na.rm = FALSE),NA),
          PDS_Male=ifelse(Gender==1,rowMeans(cbind(PubSpurt,PubHair,PubZits,PubVoice,PubFace),na.rm = FALSE),NA),
          Puberty_Category=ifelse(Gender==0,
-                                 ifelse(rowSums(cbind(PubHair,PubBreast),na.rm=TRUE)==2 & MensesStarted==1,"Prepubertal",
-                                 ifelse(rowSums(cbind(PubHair,PubBreast),na.rm=TRUE)==3 & MensesStarted==1,"Early Pubertal",
-                                 ifelse(rowSums(cbind(PubHair,PubBreast),na.rm=TRUE)>3 & MensesStarted==1,"Midpubertal",
-                                 ifelse(rowSums(cbind(PubHair,PubBreast),na.rm=TRUE)<= 7 & MensesStarted==4,"Late pubertal",
-                                 ifelse(rowSums(cbind(PubHair,PubBreast),na.rm=TRUE)==8 & MensesStarted==4,"Postpubertal",NA))))),
+                                 ifelse(rowSums(cbind(PubHair,PubBreast),
+                                                na.rm=TRUE)==2 & MensesStarted==1,"Prepubertal",
+                                 ifelse(rowSums(cbind(PubHair,PubBreast),
+                                                na.rm=TRUE)==3 & MensesStarted==1,"Early Pubertal",
+                                 ifelse(rowSums(cbind(PubHair,PubBreast),
+                                                na.rm=TRUE)>3 & MensesStarted==1,"Midpubertal",
+                                 ifelse(rowSums(cbind(PubHair,PubBreast)
+                                                ,na.rm=TRUE)<= 7 & MensesStarted==4,"Late pubertal",
+                                 ifelse(rowSums(cbind(PubHair,PubBreast),
+                                                na.rm=TRUE)==8 & MensesStarted==4,"Postpubertal",NA))))),
                             ifelse(Gender==1,
-                                 ifelse(rowSums(cbind(PubHair,PubVoice,PubFace),na.rm=TRUE)==3,"Prepubertal",
-                                 ifelse(rowSums(cbind(PubHair,PubVoice,PubFace),na.rm=TRUE)>3 &
-                                          rowSums(cbind(PubHair,PubVoice,PubFace),na.rm=TRUE)<6,"Early Pubertal",
-                                 ifelse(rowSums(cbind(PubHair,PubVoice,PubFace),na.rm=TRUE)>5&
-                                          rowSums(cbind(PubHair,PubVoice,PubFace),na.rm=TRUE)<9,"Midpubertal",
-                                 ifelse(rowSums(cbind(PubHair,PubVoice,PubFace),na.rm=TRUE)>8&
-                                          rowSums(cbind(PubHair,PubVoice,PubFace),na.rm=TRUE)<12,"Late pubertal",
-                                 ifelse(rowSums(cbind(PubHair,PubVoice,PubFace),na.rm=TRUE)==12,"Postpubertal",NA))))),NA)),
+                                 ifelse(rowSums(cbind(PubHair,PubVoice,PubFace),
+                                                na.rm=TRUE)==3,"Prepubertal",
+                                 ifelse(rowSums(cbind(PubHair,PubVoice,PubFace),
+                                                na.rm=TRUE)>3 &
+                                          rowSums(cbind(PubHair,PubVoice,PubFace),
+                                                  na.rm=TRUE)<6,"Early Pubertal",
+                                 ifelse(rowSums(cbind(PubHair,PubVoice,PubFace),
+                                                na.rm=TRUE)>5&
+                                          rowSums(cbind(PubHair,PubVoice,PubFace),
+                                                  na.rm=TRUE)<9,"Midpubertal",
+                                 ifelse(rowSums(cbind(PubHair,PubVoice,PubFace),
+                                                na.rm=TRUE)>8&
+                                          rowSums(cbind(PubHair,PubVoice,PubFace),
+                                                  na.rm=TRUE)<12,"Late pubertal",
+                                        ifelse(rowSums(cbind(PubHair,PubVoice,PubFace),
+                                                       na.rm=TRUE)==12,"Postpubertal",NA))))),NA)),
          PeriodStartAge=ifelse(PubMenses==0,0,
                             ifelse(!PubMenses==0,PubMenses+5,NA))) %>%
   select(-PubSpurt,-PubZits,-PubHair,-PubBreast,-PubVoice,-PubFace,-PubMenses,-PubKiss) %>%
@@ -1175,5 +1188,52 @@ semPaths(results3,what="std",
                   height = 5, width = 10)
 
 
+
+```
+
+Multivariate Multiple Linear Regression Analysis & Multiple Regression Analysis
+```{r, message=FALSE, warning=FALSE, include=FALSE}
+
+## Multivariate Multiple Regression
+model.1 <- manova(cbind(OppMonitorMean,oldest,EMAaloneBFGF) ~ Gender*Ethnicity*Puberty_2group, data = thedata, na.action=na.omit)
+summary.aov(model.1)
+heplot(model.1)
+
+
+model.1 <- lm(cbind(OppMonitorMean,oldest,EMAaloneBFGF) ~ Gender*Ethnicity*Puberty_2group, data = thedata, na.action=na.omit)
+Anova(model.1,test.statistic="Roy")
+anova(model.1,test="Roy")
+heplot(model.1)
+
+
+## Big ole multiple regression
+model.2<-lm(DatingConflictMean~ 
+             Gender*
+             Ethnicity*
+             Puberty_2group*
+             OppMonitorMean*
+             oldest*
+             EMAaloneBFGF, data=thedata, na.action=na.omit)
+summary(model.2)
+anova(model.2)
+
+# Trying to whittle down the model
+model.3<-lm(DatingConflictMean~
+              Ethnicity*
+              Gender*
+              Puberty_2group*
+              OppMonitorMean*
+              EMAaloneBFGF, data=thedata, na.action=na.omit)
+summary(model.3)
+anova(model.3)
+
+# Whittling
+model.4<-lm(DatingConflictMean ~ 
+              Gender*
+              Ethnicity*
+              Puberty_2group*
+              OppMonitorMean, data=thedata, na.action=na.omit)
+summary(model.4)
+anova(model.4)
 
 ```
