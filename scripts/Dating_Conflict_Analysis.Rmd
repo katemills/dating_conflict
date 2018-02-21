@@ -1,7 +1,7 @@
 ---
 title: "Dating Conflict Analysis"
 author: "Kate Mills"
-date: "November 10, 2017"
+date: "February 12, 2018"
 output: html_document
 ---
 
@@ -21,7 +21,8 @@ knitr::opts_chunk$set(
 	include = FALSE
 )
 packages <- c( "tidyverse", "RODBC", "data.table",
-               "ggplot2","lavaan","semPlot")
+               "ggplot2","lavaan","semPlot", "mice",
+               "sjPlot","stargazer","apaTables")
 if (length(setdiff(packages, rownames(installed.packages()))) > 0) {
   install.packages(setdiff(packages, rownames(installed.packages())))
 }
@@ -52,6 +53,7 @@ surveydata <- data.table(RODBC::sqlQuery(conn,"SELECT * From PInf1.dbo.SWave"))
 rm(conn)
 
 EMA_waves3456<-read.csv("../../EMA_Wave3456.csv",header=TRUE,stringsAsFactors = FALSE)
+demotable<-read.csv("../../../../Data/WebSurvey/Demographics/Demographics.csv")
 ```
 
 Clean data
@@ -115,15 +117,27 @@ puberty<-left_join(demographics,(surveydata %>%
                             ifelse(!PubMenses==0,PubMenses+5,NA))) %>%
   select(-PubSpurt,-PubZits,-PubHair,-PubBreast,-PubVoice,-PubFace,-PubMenses,-PubKiss) %>%
   mutate(Puberty_Category=factor(Puberty_Category,levels = c("Prepubertal", "Early Pubertal", "Midpubertal",
-                                                             "Late pubertal","Postpubertal"))) %>%
-  mutate(Puberty_3group=ifelse(Gender==0,
-                               ifelse(PDS_Female<=3,"less",
-                                      ifelse(PDS_Female>3 & PDS_Female<3.8,"avg",
-                                             ifelse(PDS_Female>=3.8,"more",NA))),
-                               ifelse(Gender==1,
-                                      ifelse(PDS_Male<=2.4,"less",
-                                             ifelse(PDS_Male>2.4 & PDS_Male<3.2,"avg",
-                                                    ifelse( PDS_Male>=3.2,"more",NA))),NA)))
+                                                             "Late pubertal","Postpubertal"))) 
+
+puberty<-left_join(puberty,
+                   (demotable %>% mutate(SID=sid) %>% select(SID,age8thmm))) %>%
+  filter(WID==1,
+         age8thmm<180)
+
+puberty<-puberty %>% mutate(Puberty_3group=ifelse(Gender==0,
+                             ifelse(PDS_Female<=
+                                      quantile(PDS_Female,.25,na.rm=TRUE),"less",
+                                    ifelse(PDS_Female>quantile(PDS_Female,.25,na.rm=TRUE) &
+                                             PDS_Female<quantile(PDS_Female,.75,na.rm=TRUE),"avg",
+                                           ifelse(PDS_Female>=
+                                                    quantile(PDS_Female,.75,na.rm=TRUE),"more",NA))),
+                             ifelse(Gender==1,
+                                    ifelse(PDS_Male<=
+                                             quantile(PDS_Male,.25,na.rm=TRUE),"less",
+                                           ifelse(PDS_Male>quantile(PDS_Male,.25,na.rm=TRUE) &
+                                                    PDS_Male<quantile(PDS_Male,.75,na.rm=TRUE),"avg",
+                                                  ifelse(PDS_Male>=
+                                                      quantile(PDS_Male,.75,na.rm=TRUE),"more",NA))),NA)))
 
 # Calculate the mean and total opportunities monitoring scores
 opportunities<-surveydata %>% 
@@ -452,8 +466,7 @@ thedata1<-left_join((EMA_count %>%
                       ungroup()),
                    (puberty %>%
                       filter(WID==c(1)) %>%
-                      mutate(Puberty_2group=ifelse(Puberty_3group=="more","avg",Puberty_3group)) %>%
-                      select(SID,Gender,Latino,Puberty_3group,Puberty_2group)),
+                      select(SID,Gender,Latino,Puberty_3group,age8thmm)),
                     by = c("SID")) 
 
 subs_noBFGFalone<-unique(EMA_count %>% 
@@ -463,15 +476,13 @@ subs_noBFGFalone<-unique(EMA_count %>%
 thedata<-bind_rows(thedata1,
                    (puberty %>%
                       filter(WID==c(1)) %>%
-                      mutate(Puberty_2group=ifelse(Puberty_3group=="more","avg",Puberty_3group)) %>%
-                      select(SID,Gender,Latino,Puberty_3group,Puberty_2group) %>%
+                      select(SID,Gender,Latino,Puberty_3group,age8thmm) %>%
                       filter(SID %in% subs_noBFGFalone$SID) %>%
                       mutate(EMAaloneBFGF=0))) %>%
   mutate(Gender=ifelse(Gender==0,"Female",
                        ifelse(Gender==1,"Male",NA))) %>%
   mutate(Gender=as.factor(Gender),
          Puberty_3group=factor(Puberty_3group,levels=c("less","avg","more")),
-         Puberty_2group=factor(Puberty_2group,levels=c("less","avg")),
          Ethnicity=as.factor(Latino))
 
 
@@ -491,120 +502,261 @@ thedata<-full_join(thedata,(willint_risky_sex %>%
                               filter(WID==c(9)) %>%
                               select(SID,WillingRiskySexMean,IntentionRiskSexTotal)))
 
-thedata<-thedata[c("SID","Gender","Ethnicity","Puberty_3group","Puberty_2group","OppMonitorMean","oldest","EMAaloneBFGF",
-                "DatingConflictMean","threatening_mean","verbal_mean","WillingRiskySexMean","IntentionRiskSexTotal")] %>%
+thedata<-thedata[c("SID","Gender","Ethnicity","Puberty_3group",
+                   "OppMonitorMean","oldest",
+                   "EMAaloneBFGF","DatingConflictMean","threatening_mean",
+                   "verbal_mean","WillingRiskySexMean","IntentionRiskSexTotal",
+                   "age8thmm")] %>%
   filter(!is.na(Gender)) 
-
-thedata_female<-filter(thedata, Gender=="Female")
-thedata_male<-filter(thedata, Gender=="Male")
-
-# Print stats for descriptives table #
-
-## Opportunities Monitoring
-print(paste(length(na.omit(thedata$OppMonitorMean)),round(mean(thedata$OppMonitorMean,na.rm=TRUE),2),
-             round(sd(thedata$OppMonitorMean,na.rm=TRUE),3),round(median(thedata$OppMonitorMean,na.rm=TRUE),2),
-             round(min(thedata$OppMonitorMean,na.rm=TRUE),2),round(max(thedata$OppMonitorMean,na.rm=TRUE),2),sep = ","))
-### Females
-print(paste(length(na.omit(thedata_female$OppMonitorMean)),round(mean(thedata_female$OppMonitorMean,na.rm=TRUE),2),
-             round(sd(thedata_female$OppMonitorMean,na.rm=TRUE),3),round(median(thedata_female$OppMonitorMean,na.rm=TRUE),2),
-             round(min(thedata_female$OppMonitorMean,na.rm=TRUE),2),round(max(thedata_female$OppMonitorMean,na.rm=TRUE),2),sep = ","))
-
-### Males
-print(paste(length(na.omit(thedata_male$OppMonitorMean)),round(mean(thedata_male$OppMonitorMean,na.rm=TRUE),2),
-             round(sd(thedata_male$OppMonitorMean,na.rm=TRUE),3),round(median(thedata_male$OppMonitorMean,na.rm=TRUE),2),
-             round(min(thedata_male$OppMonitorMean,na.rm=TRUE),2),round(max(thedata_male$OppMonitorMean,na.rm=TRUE),2),sep = ","))
-
-## EMA
-print(paste(length(na.omit(thedata$EMAaloneBFGF)),round(mean(thedata$EMAaloneBFGF,na.rm=TRUE),2),
-             round(sd(thedata$EMAaloneBFGF,na.rm=TRUE),3),round(median(thedata$EMAaloneBFGF,na.rm=TRUE),2),
-             round(min(thedata$EMAaloneBFGF,na.rm=TRUE),2),round(max(thedata$EMAaloneBFGF,na.rm=TRUE),2),sep = ","))
-### Females
-print(paste(length(na.omit(thedata_female$EMAaloneBFGF)),round(mean(thedata_female$EMAaloneBFGF,na.rm=TRUE),2),
-             round(sd(thedata_female$EMAaloneBFGF,na.rm=TRUE),3),round(median(thedata_female$EMAaloneBFGF,na.rm=TRUE),2),
-             round(min(thedata_female$EMAaloneBFGF,na.rm=TRUE),2),round(max(thedata_female$EMAaloneBFGF,na.rm=TRUE),2),sep = ","))
-
-### Males
-print(paste(length(na.omit(thedata_male$EMAaloneBFGF)),round(mean(thedata_male$EMAaloneBFGF,na.rm=TRUE),2),
-             round(sd(thedata_male$EMAaloneBFGF,na.rm=TRUE),3),round(median(thedata_male$EMAaloneBFGF,na.rm=TRUE),2),
-             round(min(thedata_male$EMAaloneBFGF,na.rm=TRUE),2),round(max(thedata_male$EMAaloneBFGF,na.rm=TRUE),2),sep = ","))
-
-## Dating Conflict
-print(paste(length(na.omit(thedata$DatingConflictMean)),round(mean(thedata$DatingConflictMean,na.rm=TRUE),2),
-             round(sd(thedata$DatingConflictMean,na.rm=TRUE),3),round(median(thedata$DatingConflictMean,na.rm=TRUE),2),
-             round(min(thedata$DatingConflictMean,na.rm=TRUE),2),round(max(thedata$DatingConflictMean,na.rm=TRUE),2),sep = ","))
-### Females
-print(paste(length(na.omit(thedata_female$DatingConflictMean)),round(mean(thedata_female$DatingConflictMean,na.rm=TRUE),2),
-             round(sd(thedata_female$DatingConflictMean,na.rm=TRUE),3),round(median(thedata_female$DatingConflictMean,na.rm=TRUE),2),
-             round(min(thedata_female$DatingConflictMean,na.rm=TRUE),2),round(max(thedata_female$DatingConflictMean,na.rm=TRUE),2),sep = ","))
-
-### Males
-print(paste(length(na.omit(thedata_male$DatingConflictMean)),round(mean(thedata_male$DatingConflictMean,na.rm=TRUE),2),
-             round(sd(thedata_male$DatingConflictMean,na.rm=TRUE),3),round(median(thedata_male$DatingConflictMean,na.rm=TRUE),2),
-             round(min(thedata_male$DatingConflictMean,na.rm=TRUE),2),round(max(thedata_male$DatingConflictMean,na.rm=TRUE),2),sep = ","))
-
-## Dating Conflict Threat subscale
-print(paste(length(na.omit(thedata$threatening_mean)),round(mean(thedata$threatening_mean,na.rm=TRUE),2),
-             round(sd(thedata$threatening_mean,na.rm=TRUE),3),round(median(thedata$threatening_mean,na.rm=TRUE),2),
-             round(min(thedata$threatening_mean,na.rm=TRUE),2),round(max(thedata$threatening_mean,na.rm=TRUE),2),sep = ","))
-### Females
-print(paste(length(na.omit(thedata_female$threatening_mean)),round(mean(thedata_female$threatening_mean,na.rm=TRUE),2),
-             round(sd(thedata_female$threatening_mean,na.rm=TRUE),3),round(median(thedata_female$threatening_mean,na.rm=TRUE),2),
-             round(min(thedata_female$threatening_mean,na.rm=TRUE),2),round(max(thedata_female$threatening_mean,na.rm=TRUE),2),sep = ","))
-
-### Males
-print(paste(length(na.omit(thedata_male$threatening_mean)),round(mean(thedata_male$threatening_mean,na.rm=TRUE),2),
-             round(sd(thedata_male$threatening_mean,na.rm=TRUE),3),round(median(thedata_male$threatening_mean,na.rm=TRUE),2),
-             round(min(thedata_male$threatening_mean,na.rm=TRUE),2),round(max(thedata_male$threatening_mean,na.rm=TRUE),2),sep = ","))
-
-
-## Dating Conflict Verbal subscale
-print(paste(length(na.omit(thedata$verbal_mean)),round(mean(thedata$verbal_mean,na.rm=TRUE),2),
-             round(sd(thedata$verbal_mean,na.rm=TRUE),3),round(median(thedata$verbal_mean,na.rm=TRUE),2),
-             round(min(thedata$verbal_mean,na.rm=TRUE),2),round(max(thedata$verbal_mean,na.rm=TRUE),2),sep = ","))
-### Females
-print(paste(length(na.omit(thedata_female$verbal_mean)),round(mean(thedata_female$verbal_mean,na.rm=TRUE),2),
-             round(sd(thedata_female$verbal_mean,na.rm=TRUE),3),round(median(thedata_female$verbal_mean,na.rm=TRUE),2),
-             round(min(thedata_female$verbal_mean,na.rm=TRUE),2),round(max(thedata_female$verbal_mean,na.rm=TRUE),2),sep = ","))
-
-### Males
-print(paste(length(na.omit(thedata_male$verbal_mean)),round(mean(thedata_male$verbal_mean,na.rm=TRUE),2),
-             round(sd(thedata_male$verbal_mean,na.rm=TRUE),3),round(median(thedata_male$verbal_mean,na.rm=TRUE),2),
-             round(min(thedata_male$verbal_mean,na.rm=TRUE),2),round(max(thedata_male$verbal_mean,na.rm=TRUE),2),sep = ","))
-
-
-## Willingness to engage in risky sex
-print(paste(length(na.omit(thedata$WillingRiskySexMean)),round(mean(thedata$WillingRiskySexMean,na.rm=TRUE),2),
-             round(sd(thedata$WillingRiskySexMean,na.rm=TRUE),3),round(median(thedata$WillingRiskySexMean,na.rm=TRUE),2),
-             round(min(thedata$WillingRiskySexMean,na.rm=TRUE),2),round(max(thedata$WillingRiskySexMean,na.rm=TRUE),2),sep = ","))
-
-### Females
-print(paste(length(na.omit(thedata_female$WillingRiskySexMean)),round(mean(thedata_female$WillingRiskySexMean,na.rm=TRUE),2),
-             round(sd(thedata_female$WillingRiskySexMean,na.rm=TRUE),3),round(median(thedata_female$WillingRiskySexMean,na.rm=TRUE),2),
-             round(min(thedata_female$WillingRiskySexMean,na.rm=TRUE),2),round(max(thedata_female$WillingRiskySexMean,na.rm=TRUE),2),sep = ","))
-
-### Males
-print(paste(length(na.omit(thedata_male$WillingRiskySexMean)),round(mean(thedata_male$WillingRiskySexMean,na.rm=TRUE),2),
-             round(sd(thedata_male$WillingRiskySexMean,na.rm=TRUE),3),round(median(thedata_male$WillingRiskySexMean,na.rm=TRUE),2),
-             round(min(thedata_male$WillingRiskySexMean,na.rm=TRUE),2),round(max(thedata_male$WillingRiskySexMean,na.rm=TRUE),2),sep = ","))
-
-
-## Intention to engage in risky sex
-print(paste(length(na.omit(thedata$IntentionRiskSexTotal)),round(mean(thedata$IntentionRiskSexTotal,na.rm=TRUE),2),
-             round(sd(thedata$IntentionRiskSexTotal,na.rm=TRUE),3),round(median(thedata$IntentionRiskSexTotal,na.rm=TRUE),2),
-             round(min(thedata$IntentionRiskSexTotal,na.rm=TRUE),2),round(max(thedata$IntentionRiskSexTotal,na.rm=TRUE),2),sep = ","))
-
-### Females
-print(paste(length(na.omit(thedata_female$IntentionRiskSexTotal)),round(mean(thedata_female$IntentionRiskSexTotal,na.rm=TRUE),2),
-             round(sd(thedata_female$IntentionRiskSexTotal,na.rm=TRUE),3),round(median(thedata_female$IntentionRiskSexTotal,na.rm=TRUE),2),
-             round(min(thedata_female$IntentionRiskSexTotal,na.rm=TRUE),2),round(max(thedata_female$IntentionRiskSexTotal,na.rm=TRUE),2),sep = ","))
-
-### Males
-print(paste(length(na.omit(thedata_male$IntentionRiskSexTotal)),round(mean(thedata_male$IntentionRiskSexTotal,na.rm=TRUE),2),
-             round(sd(thedata_male$IntentionRiskSexTotal,na.rm=TRUE),3),round(median(thedata_male$IntentionRiskSexTotal,na.rm=TRUE),2),
-             round(min(thedata_male$IntentionRiskSexTotal,na.rm=TRUE),2),round(max(thedata_male$IntentionRiskSexTotal,na.rm=TRUE),2),sep = ","))
+thedata$Puberty_3group<-factor(thedata$Puberty_3group,levels = c("less", "avg", "more"))
 
 ```
 
+Table 1 (descriptives)
+```{R}
+stargazer(as.data.frame(dummydata[c("OppMonitorMean",
+                                    "oldest",
+                                    "EMAaloneBFGF",
+                                    "DatingConflictMean",
+                                    "threatening_mean",
+                                    "verbal_mean")]),
+          summary=TRUE,
+          digits=2,
+          title="Descriptive Statistics",
+          type = "html",
+          out="/PeerInfluence/Papers/Dating Conflict/Tables/Table1all.doc")
+
+dummydata_female<-filter(dummydata, Gender==0)
+stargazer(as.data.frame(dummydata_female[c("OppMonitorMean",
+                                    "oldest",
+                                    "EMAaloneBFGF",
+                                    "DatingConflictMean",
+                                    "threatening_mean",
+                                    "verbal_mean")]),
+          summary=TRUE,
+          digits=2,
+          title="Descriptive Statistics",
+          type = "html",
+          out="/PeerInfluence/Papers/Dating Conflict/Tables/Table1female.doc")
+
+dummydata_male<-filter(dummydata, Gender==1)
+stargazer(as.data.frame(dummydata_male[c("OppMonitorMean",
+                                    "oldest",
+                                    "EMAaloneBFGF",
+                                    "DatingConflictMean",
+                                    "threatening_mean",
+                                    "verbal_mean")]),
+          summary=TRUE,
+          digits=2,
+          title="Descriptive Statistics",
+          type = "html",
+          out="/PeerInfluence/Papers/Dating Conflict/Tables/Table1male.doc")
+
+```
+
+Table 2 (correlation table)
+```{R}
+# Dummy code gender, puberty, and ethnicity for correlation table
+
+dummydata<-thedata %>%
+  mutate(Gender=ifelse(Gender=="Female",0,
+                       ifelse(Gender=="Male",1,NA)),
+         Puberty_3group=ifelse(Puberty_3group=="less",0,
+                               ifelse(Puberty_3group=="avg",1,
+                                      ifelse(Puberty_3group=="more",2,NA))),
+         Ethnicity=as.numeric(as.character(Ethnicity)))
+
+colnames(dummydata)
+
+sjt.corr(dummydata[,c("Ethnicity",
+                 "Gender",
+                 "Puberty_3group",
+                 "OppMonitorMean",
+                 "oldest",
+                 "EMAaloneBFGF",
+                 "DatingConflictMean")],
+         corr.method = "pearson",
+         na.deletion = "pairwise",
+         var.labels = c("Ethnicity",
+                 "Gender",
+                 "Pubertal Development",
+                 "Opportunities Monitoring",
+                 "Oldest ever romantic partner",
+                 "EMA",
+                 "CADRI Score"),
+         title ="Bivariate Correlation Between Main Variables",
+         triangle = "lower",
+         fade.ns = F,
+         digits = 2,
+         file="/PeerInfluence/Papers/Dating Conflict/Tables/Table2.doc")
+
+```
+
+Tables 3-7
+```{r}
+## Opportunities Monitoring multiple regression table
+OppMon_GEP<-lm(OppMonitorMean ~ age8thmm+ Gender+Ethnicity+Puberty_3group, data=thedata, na.action=na.omit)
+OppMon_GEPint<-lm(OppMonitorMean ~ age8thmm+ Gender*Puberty_3group+Ethnicity, data=thedata, na.action=na.omit)
+sjt.lm(OppMon_GEP,
+       OppMon_GEPint,
+       pred.labels = c("Age at baseline",
+                       "Gender (Male)",
+                       "Ethnicity (Latino)",
+                       "Less Developed",
+                       "More Developed",
+                       "Gender x Less Developed",
+                       "Gender x More Developed"),
+       show.ci = F,
+       show.se = T,
+       depvar.labels = c("Model 1",
+                         "Model 2"),
+       file="/PeerInfluence/Papers/Dating Conflict/Tables/OppMonTable.doc")
+
+## Age oldest romantic partner multiple regression table
+Oldest_GEP<-lm(oldest ~ age8thmm+Gender+Ethnicity+Puberty_3group, data=thedata, na.action=na.omit)
+Oldest_GEPint<-lm(oldest ~ age8thmm+Gender*Ethnicity+Puberty_3group, data=thedata, na.action=na.omit)
+
+sjt.lm(Oldest_GEP,
+       Oldest_GEPint,
+       pred.labels = c("Age at baseline",
+                       "Gender (Male)",
+                       "Ethnicity (Latino)",
+                       "Less Developed",
+                       "More Developed",
+                       "Gender x Ethnicity"),
+       show.ci = F,
+       show.se = T,
+       depvar.labels = c("Model 1",
+                         "Model 2"),
+       file="/PeerInfluence/Papers/Dating Conflict/Tables/AgeOldestTable.doc")
+
+## EMA multiple regression table
+EMA_GEP<-lm(EMAaloneBFGF ~ age8thmm+Gender+Ethnicity+Puberty_3group, data=thedata, na.action=na.omit)
+EMA_GEPOp<-lm(EMAaloneBFGF ~ age8thmm+Gender+Ethnicity+Puberty_3group+OppMonitorMean, data=thedata, na.action=na.omit)
+EMA_GEPOpOl<-lm(EMAaloneBFGF ~ age8thmm+Gender+Ethnicity+Puberty_3group+OppMonitorMean+oldest, data=thedata, na.action=na.omit)
+
+sjt.lm(EMA_GEP,
+       EMA_GEPOp,
+       EMA_GEPOpOl,
+       pred.labels = c("Age at baseline",
+                       "Gender (Male)",
+                       "Ethnicity (Latino)",
+                       "Less Developed",
+                       "More Developed",
+                       "Opportunities Monitoring",
+                       "Age oldest romantic partner"),
+       show.ci = F,
+       show.se = T,
+       depvar.labels = c("Model 1",
+                         "Model 2",
+                         "Model 3"),
+       file="/PeerInfluence/Papers/Dating Conflict/Tables/EMATable.doc")
+
+## CADRI multiple regression table
+CADRI_GEP<-lm(DatingConflictMean ~ age8thmm+Gender+Ethnicity+Puberty_3group, data=thedata, na.action=na.omit)
+CADRI_GEPOp<-lm(DatingConflictMean ~ age8thmm+Gender+Ethnicity+Puberty_3group+OppMonitorMean, data=thedata, na.action=na.omit)
+CADRI_GEPOpOl<-lm(DatingConflictMean ~ age8thmm+Gender+Ethnicity+Puberty_3group+OppMonitorMean+oldest, data=thedata, na.action=na.omit)
+CADRI_GEPOpOlEMA<-lm(DatingConflictMean~ age8thmm+Gender+Ethnicity+Puberty_3group+OppMonitorMean+oldest+EMAaloneBFGF, data=thedata, na.action=na.omit)
+
+sjt.lm(CADRI_GEP,
+       CADRI_GEPOp,
+       CADRI_GEPOpOl,
+       CADRI_GEPOpOlEMA,
+       pred.labels = c("Age at baseline",
+                       "Gender (Male)",
+                       "Ethnicity (Latino)",
+                       "Less Developed",
+                       "More Developed",
+                       "Opportunities Monitoring",
+                       "Age oldest romantic partner",
+                       "EMA"),
+       show.ci = F,
+       show.se = T,
+       depvar.labels = c("Model 1",
+                         "Model 2",
+                         "Model 3",
+                         "Model 4"),
+       file="/PeerInfluence/Papers/Dating Conflict/Tables/CADRITable.doc")
+
+## CADRI multiple regression interaction table
+CADRI_MAINS<-lm(DatingConflictMean~ age8thmm+Gender+Puberty_3group+OppMonitorMean, data=thedata, na.action=na.omit)
+CADRI_INT<-lm(DatingConflictMean~ age8thmm+Gender*Puberty_3group*OppMonitorMean, data=thedata, na.action=na.omit)
+sjt.lm(CADRI_MAINS,
+       CADRI_INT,
+       pred.labels = c("Age at baseline",
+                       "Gender (Male)",
+                       "Less Developed",
+                       "More Developed",
+                       "Opportunities Monitoring",
+                       "Gender x Less Developed",
+                       "Gender x More Developed",
+                       "Gender x Opportunities Monitoring",
+                       "Opportunities Monitoring x Less Developed",
+                       "Opportunities Monitoring x More Developed",
+                       "Gender x Less Developed x Opportunities Monitoring",
+                       "Gender x More Developed x Opportunities Monitoring"),
+       show.ci = F,
+       show.se = T,
+       depvar.labels = c("CADRI","CADRI"),
+       file="/PeerInfluence/Papers/Dating Conflict/Tables/CADRI_int_Table.doc")
+
+```
+
+Figures
+```{R}
+thedata$Puberty_3group<-factor(thedata$Puberty_3group,levels = c("less", "avg", "more"))
+
+colour_labels=c("#2F2963","#F96900")
+oppmon_gender_conflict_graph<-ggplot(thedata %>% filter(!is.na(DatingConflictMean)),
+                                             aes(x=OppMonitorMean, y=DatingConflictMean, 
+                                                 colour=Gender,fill=Gender)) +
+geom_point(aes(colour=Gender),size=1.5,alpha=.3)+
+  geom_smooth(method=lm,
+                aes(x=OppMonitorMean, y=DatingConflictMean, colour=Gender, fill=Gender),
+                size=.7,
+                alpha=0.4)+
+scale_fill_manual(values=colour_labels,
+                      labels=c('Female', 'Male'))+
+scale_colour_manual(values=colour_labels,
+                      labels=c('Female', 'Male'))+
+  labs(x="Opportunities Monitoring mean score",
+       y="CADRI mean score",colour="Gender")+
+  theme_kate() + theme(legend.position="right")
+oppmon_gender_conflict_graph
+
+
+
+# Interaction between pubertal, oppmon, gender ~ CADRI
+
+puberty_labels=c("#0058AA","#05233F")
+oppmon_gender_puberty_conflict_graph<-ggplot(thedata %>% 
+                                       filter(!is.na(DatingConflictMean)) %>% 
+                                       filter(!Puberty_3group=="less"),
+                                             aes(x=OppMonitorMean, y=DatingConflictMean, 
+                                                 colour=Puberty_3group,fill=Puberty_3group)) +
+geom_point(aes(colour=Puberty_3group),size=1.5,alpha=.3)+
+  geom_smooth(method=lm,
+                aes(x=OppMonitorMean, y=DatingConflictMean, colour=Puberty_3group, fill=Puberty_3group),
+                size=.8,
+                alpha=0.5)+
+scale_fill_manual(values=puberty_labels,
+                      labels=c('Average', 'More'),
+                  guide = FALSE)+
+scale_colour_manual(values=puberty_labels,
+                      labels=c('Average', 'More'))+
+  facet_grid(.~Gender,
+             scales='free')+
+  labs(x="Opportunities Monitoring mean score",
+       y="CADRI mean score",colour="Pubertal \nDevelopment")+
+  theme_kate() + theme(legend.position="right")
+oppmon_gender_puberty_conflict_graph
+
+```
+
+
+
+
+Supplemental Analyses:
 Linear Regression Analysis
 ```{r, message=FALSE, warning=FALSE, include=FALSE}
 
@@ -772,32 +924,12 @@ summary(oppmon_conflict)
 print(paste0("Adj R Square = ",round(summary(oppmon_conflict)$adj.r.squared,3),
       " p-value = ",round(anova(oppmon_conflict)$'Pr(>F)'[1],9)))
 
-# Is there an interaction wtih gender?
-oppmon_gender_conflict<-lm(DatingConflictMean ~ OppMonitorMean*Gender, data=thedata, na.action=na.omit)
-anova(oppmon_gender_conflict) # Yes
-print(paste0("Adj R Square = ",round(summary(oppmon_gender_conflict)$adj.r.squared,3),
-      " p-value = ",round(anova(oppmon_gender_conflict)$'Pr(>F)'[1],9)))
-
-
-oppmon_gender_conflict_graph<-ggplot(thedata %>% filter(!is.na(DatingConflictMean)),
-                                             aes(x=OppMonitorMean, y=DatingConflictMean, 
-                                                 colour=Gender)) +
-geom_point(aes(colour=Gender),alpha=.3)+
-  geom_smooth(method=lm,
-                aes(x=OppMonitorMean, y=DatingConflictMean, colour=Gender),
-                size=.7,
-                alpha=0.2)+
-  labs(x="Opportunity Monitor Mean Score",
-       y="CADRI mean score",colour="Gender")+
-  theme_kate() + theme(legend.position="right")
-oppmon_gender_conflict_graph
 
 # Is there an interaction wtih ethnicity?
 oppmon_ethnicity_conflict<-lm(DatingConflictMean ~ OppMonitorMean*Ethnicity, data=thedata, na.action=na.omit)
 anova(oppmon_ethnicity_conflict) # Yes
 print(paste0("Adj R Square = ",round(summary(oppmon_ethnicity_conflict)$adj.r.squared,3),
       " p-value = ",round(anova(oppmon_ethnicity_conflict)$'Pr(>F)'[1],9)))
-
 
 oppmon_ethnicity_conflict_graph<-ggplot(thedata %>% filter(!is.na(DatingConflictMean)) %>% filter(!is.na(Ethnicity)),
                                              aes(x=OppMonitorMean, y=DatingConflictMean, 
@@ -812,6 +944,13 @@ geom_point(aes(colour=as.factor(Ethnicity)),alpha=.3)+
   scale_colour_discrete(labels=latino_labels)+
   theme_kate() + theme(legend.position="right")
 oppmon_ethnicity_conflict_graph
+
+# Is there an interaction with gender?
+oppmon_gender_conflict<-lm(DatingConflictMean ~ OppMonitorMean*Gender, data=thedata, na.action=na.omit)
+anova(oppmon_gender_conflict) # Yes
+print(paste0("Adj R Square = ",round(summary(oppmon_gender_conflict)$adj.r.squared,3),
+      " p-value = ",round(anova(oppmon_gender_conflict)$'Pr(>F)'[1],9)))
+
 
 # Is there an interaction wtih puberty?
 oppmon_puberty_conflict<-lm(DatingConflictMean ~ OppMonitorMean*Puberty_2group, data=thedata, na.action=na.omit)
@@ -1207,7 +1346,7 @@ heplot(model.1)
 
 
 ## Big ole multiple regression
-model.2<-lm(DatingConflictMean~ 
+model.2<-lm(DatingConflictMean~ age8thmm +
              Gender*
              Ethnicity*
              Puberty_2group*
@@ -1216,9 +1355,15 @@ model.2<-lm(DatingConflictMean~
              EMAaloneBFGF, data=thedata, na.action=na.omit)
 summary(model.2)
 anova(model.2)
+resid(model.2)
+par(mfrow = c(2, 2))
+plot(model.2)
+PRESS(linear.model = model.2)
+pred_r_squared(linear.model = model.2)
+model_fit_stats(model.2)
 
 # Trying to whittle down the model
-model.3<-lm(DatingConflictMean~
+model.3<-lm(DatingConflictMean~age8thmm+
               Ethnicity*
               Gender*
               Puberty_2group*
@@ -1226,14 +1371,15 @@ model.3<-lm(DatingConflictMean~
               EMAaloneBFGF, data=thedata, na.action=na.omit)
 summary(model.3)
 anova(model.3)
+model_fit_stats(model.3)
 
-# Whittling
+# Whittling (seems best model)
 model.4<-lm(DatingConflictMean ~ 
-              Gender*
               Ethnicity*
               Puberty_2group*
-              OppMonitorMean, data=thedata, na.action=na.omit)
+              OppMonitorMean, data=thedata, na.action=na.exclude)
 summary(model.4)
 anova(model.4)
+model_fit_stats(model.4)
 
 ```
