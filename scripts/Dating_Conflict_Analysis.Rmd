@@ -1383,3 +1383,20 @@ anova(model.4)
 model_fit_stats(model.4)
 
 ```
+
+Differences in ever dated anyone between avg. vs. more pubertally developed girls?
+```{r}
+
+  output<-left_join((thedata %>%
+             filter(Gender=="Female") %>%
+             select(SID, Gender,Puberty_3group)),
+          (surveydata %>%
+             select(SID,EverDate,WID)),
+          by="SID") %>%
+  filter(WID==c(5,9,11)) %>%
+  group_by(Puberty_3group,EverDate) %>%
+  summarize(count=n())
+  
+
+
+```
